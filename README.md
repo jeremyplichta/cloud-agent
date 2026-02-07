@@ -12,6 +12,54 @@ Cloud Auggie is a GCP VM that lets you:
 
 Perfect for tasks that take hours - deploy Cloud Auggie, start your task in tmux, detach, and check back later.
 
+## Installation
+
+### Install the Agent Skill (Recommended)
+
+Install the Cloud Auggie skill so AI agents know how to deploy to cloud VMs:
+
+```bash
+# Install to all agents (Claude Code, Cursor, Copilot, Augment, etc.)
+npx ai-agent-skills install jeremyplichta/cloud-auggie
+
+# Or install to a specific agent only
+npx ai-agent-skills install jeremyplichta/cloud-auggie --agent claude
+```
+
+This uses the [universal skills installer](https://github.com/skillcreatorai/Ai-Agent-Skills) that works with Claude Code, Cursor, VS Code Copilot, Augment/Auggie, Gemini CLI, and more.
+
+### Install the `ca` Command
+
+Install the `ca` command to run Cloud Auggie from anywhere:
+
+```bash
+# Clone the repo
+git clone git@github.com:jeremyplichta/cloud-auggie.git
+cd cloud-auggie
+
+# Install the ca command
+./install.sh
+```
+
+This adds the `ca` function to your `.zshrc` (or `.bashrc`). Then restart your terminal or run:
+
+```bash
+source ~/.zshrc
+```
+
+Now you can use `ca` from any directory:
+
+```bash
+ca --help
+ca git@github.com:org/repo.git
+```
+
+To uninstall:
+
+```bash
+./uninstall.sh
+```
+
 ## Prerequisites
 
 - Google Cloud SDK (`gcloud`) installed and configured
@@ -96,7 +144,8 @@ GITHUB_TOKEN_FILE=~/.github-cloud-auggie-token ./deploy.sh --skip-vm https://git
 ## Usage Reference
 
 ```
-Usage: ./deploy.sh [OPTIONS] [REPO_URL...]
+Usage: ca [OPTIONS] [REPO_URL...]
+       ./deploy.sh [OPTIONS] [REPO_URL...]
 
 Arguments:
   REPO_URL    GitHub repo URL(s) to clone
