@@ -38,7 +38,7 @@ usage() {
     cat << EOF
 Usage: $0 [OPTIONS] [REPO_URL...]
 
-Deploy repos to Cloud Auggie VM. Creates VM if it doesn't exist.
+Deploy repos to Cloud Agent VM. Creates VM if it doesn't exist.
 
 Arguments:
   REPO_URL    GitHub repo URL(s) to clone
@@ -56,7 +56,7 @@ Options:
 Environment Variables:
   AGENT             Agent to use (same as --agent)
   SSH_KEY           Path to SSH private key for GitHub (recommended for enterprise)
-                    Example: SSH_KEY=~/.ssh/cloud-auggie
+                    Example: SSH_KEY=~/.ssh/cloud-agent
   GITHUB_TOKEN      GitHub PAT for HTTPS cloning (for personal repos)
   GITHUB_TOKEN_FILE Path to file containing GitHub PAT
   ZONE              GCP zone (default: us-central1-a)
@@ -65,24 +65,24 @@ Environment Variables:
 
 Examples:
   # Deploy with Auggie (default)
-  SSH_KEY=~/.ssh/cloud-auggie $0 git@github.com:org/repo.git
+  SSH_KEY=~/.ssh/cloud-agent $0 git@github.com:org/repo.git
 
   # Deploy with Claude Code
-  AGENT=claude SSH_KEY=~/.ssh/cloud-auggie $0 git@github.com:org/repo.git
+  AGENT=claude SSH_KEY=~/.ssh/cloud-agent $0 git@github.com:org/repo.git
   # Or: $0 --agent claude git@github.com:org/repo.git
 
-  # Generate a dedicated key for cloud-auggie
-  ssh-keygen -t ed25519 -f ~/.ssh/cloud-auggie -C "cloud-auggie"
-  # Add ~/.ssh/cloud-auggie.pub to GitHub: Settings > SSH Keys
+  # Generate a dedicated key for cloud-agent
+  ssh-keygen -t ed25519 -f ~/.ssh/cloud-agent -C "cloud-agent"
+  # Add ~/.ssh/cloud-agent.pub to GitHub: Settings > SSH Keys
 
   # Using GitHub PAT (for personal repos)
   GITHUB_TOKEN_FILE=~/.github-token $0 https://github.com/user/repo.git
 
   # Deploy additional repo to existing VM
-  SSH_KEY=~/.ssh/cloud-auggie $0 --skip-vm git@github.com:org/another-repo.git
+  SSH_KEY=~/.ssh/cloud-agent $0 --skip-vm git@github.com:org/another-repo.git
 
   # Deploy multiple repos
-  SSH_KEY=~/.ssh/cloud-auggie $0 git@github.com:org/repo1.git git@github.com:org/repo2.git
+  SSH_KEY=~/.ssh/cloud-agent $0 git@github.com:org/repo1.git git@github.com:org/repo2.git
 EOF
     exit 0
 }
@@ -129,7 +129,7 @@ done
 load_agent_hook "$AGENT"
 
 log "╔══════════════════════════════════════════════════════════════╗"
-log "║  🐕 CLOUD AUGGIE DEPLOYMENT                                  ║"
+log "║  🐕 CLOUD AGENT DEPLOYMENT                                  ║"
 log "╚══════════════════════════════════════════════════════════════╝"
 log "Agent: $HOOK_DISPLAY_NAME"
 
@@ -169,15 +169,15 @@ if [ -n "$GITHUB_TOKEN_FILE" ] && [ -f "$GITHUB_TOKEN_FILE" ]; then
 fi
 
 # Check if VM exists
-VM_EXISTS=$(gcloud compute instances list --filter="name=cloud-auggie" --format="value(name)" 2>/dev/null || true)
+VM_EXISTS=$(gcloud compute instances list --filter="name=cloud-agent" --format="value(name)" 2>/dev/null || true)
 
 if [ "$CREATE_VM" = "auto" ]; then
     if [ -n "$VM_EXISTS" ]; then
         CREATE_VM="no"
-        log "✓ Cloud Auggie VM already exists, will deploy to existing VM"
+        log "✓ Cloud Agent VM already exists, will deploy to existing VM"
     else
         CREATE_VM="yes"
-        log "✓ Cloud Auggie VM not found, will create it"
+        log "✓ Cloud Agent VM not found, will create it"
     fi
 elif [ "$CREATE_VM" = "no" ] && [ -z "$VM_EXISTS" ]; then
     log "❌ ERROR: VM doesn't exist and --skip-vm was specified"
@@ -203,12 +203,12 @@ EOF
     terraform init -input=false
 
     log ""
-    log "Applying Terraform (creating cloud-auggie VM)..."
+    log "Applying Terraform (creating cloud-agent VM)..."
     terraform apply -auto-approve
 
-    VM_IP=$(terraform output -raw cloud_auggie_ip)
+    VM_IP=$(terraform output -raw cloud_agent_ip)
     log ""
-    log "✅ Cloud Auggie VM created!"
+    log "✅ Cloud Agent VM created!"
     log "   External IP: $VM_IP"
 
     log ""
@@ -225,17 +225,17 @@ if [ "$SKIP_CREDS" = false ]; then
     if [ -n "$SSH_KEY" ]; then
         if [ -f "$SSH_KEY" ]; then
             log "Transferring SSH key..."
-            gcloud compute scp "$SSH_KEY" cloud-auggie:~/.ssh/id_ed25519 --zone="$ZONE" 2>/dev/null
+            gcloud compute scp "$SSH_KEY" cloud-agent:~/.ssh/id_ed25519 --zone="$ZONE" 2>/dev/null
             if [ -f "${SSH_KEY}.pub" ]; then
-                gcloud compute scp "${SSH_KEY}.pub" cloud-auggie:~/.ssh/id_ed25519.pub --zone="$ZONE" 2>/dev/null
+                gcloud compute scp "${SSH_KEY}.pub" cloud-agent:~/.ssh/id_ed25519.pub --zone="$ZONE" 2>/dev/null
             fi
-            gcloud compute ssh cloud-auggie --zone="$ZONE" --command="
+            gcloud compute ssh cloud-agent --zone="$ZONE" --command="
                 chmod 600 ~/.ssh/id_ed25519
                 chmod 644 ~/.ssh/id_ed25519.pub 2>/dev/null || true
                 # Add GitHub to known_hosts to avoid prompt
                 ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-                git config --global user.email 'cloud-auggie@localhost'
-                git config --global user.name 'Cloud Auggie'
+                git config --global user.email 'cloud-agent@localhost'
+                git config --global user.name 'Cloud Agent'
                 echo '✅ SSH key configured'
             " 2>/dev/null
             log "✅ SSH key transferred"
@@ -246,18 +246,18 @@ if [ "$SKIP_CREDS" = false ]; then
     # GitHub PAT (for personal repos / non-enterprise)
     elif [ -n "$GITHUB_TOKEN" ]; then
         log "Transferring GitHub credentials (PAT)..."
-        gcloud compute ssh cloud-auggie --zone="$ZONE" --command="
+        gcloud compute ssh cloud-agent --zone="$ZONE" --command="
             git config --global credential.helper store
             echo 'https://oauth2:$GITHUB_TOKEN@github.com' > ~/.git-credentials
             chmod 600 ~/.git-credentials
-            git config --global user.email 'cloud-auggie@localhost'
-            git config --global user.name 'Cloud Auggie'
+            git config --global user.email 'cloud-agent@localhost'
+            git config --global user.name 'Cloud Agent'
             echo '✅ GitHub credentials configured'
         " 2>/dev/null
         log "✅ GitHub PAT transferred"
     else
         log "⚠️  No SSH_KEY or GITHUB_TOKEN set."
-        log "   For enterprise: SSH_KEY=~/.ssh/cloud-auggie ./deploy.sh git@github.com:org/repo.git"
+        log "   For enterprise: SSH_KEY=~/.ssh/cloud-agent ./deploy.sh git@github.com:org/repo.git"
         log "   For personal:   GITHUB_TOKEN=xxx ./deploy.sh https://github.com/user/repo.git"
     fi
 
@@ -283,7 +283,7 @@ if [ ${#REPOS[@]} -gt 0 ]; then
         repo_name=$(basename "$repo" .git)
         log "  Cloning $repo_name..."
 
-        gcloud compute ssh cloud-auggie --zone="$ZONE" --command="
+        gcloud compute ssh cloud-agent --zone="$ZONE" --command="
             cd /workspace
             if [ -d '$repo_name' ]; then
                 echo '  ⚠️  $repo_name already exists, pulling latest...'
@@ -304,17 +304,17 @@ fi
 # List workspace contents
 log ""
 log "Workspace contents:"
-gcloud compute ssh cloud-auggie --zone="$ZONE" --command="ls -la /workspace/" 2>/dev/null
+gcloud compute ssh cloud-agent --zone="$ZONE" --command="ls -la /workspace/" 2>/dev/null
 
 AGENT_CMD=$(hook_agent_command)
 
 log ""
 log "╔══════════════════════════════════════════════════════════════╗"
-log "║  🐕 CLOUD AUGGIE READY!                                      ║"
+log "║  🐕 CLOUD AGENT READY!                                      ║"
 log "╚══════════════════════════════════════════════════════════════╝"
 log ""
-log "SSH into cloud-auggie:"
-log "  gcloud compute ssh cloud-auggie --zone=$ZONE"
+log "SSH into cloud-agent:"
+log "  gcloud compute ssh cloud-agent --zone=$ZONE"
 log ""
 log "Start working:"
 log "  cd /workspace/<repo-name>"
@@ -323,10 +323,10 @@ log "  $AGENT_CMD"
 log ""
 log "Agent can commit and push:"
 log "  git checkout -b feature/my-changes"
-log "  git add . && git commit -m 'Changes from cloud-auggie'"
+log "  git add . && git commit -m 'Changes from cloud-agent'"
 log "  git push -u origin feature/my-changes"
 log ""
-log "To destroy cloud-auggie when done:"
+log "To destroy cloud-agent when done:"
 log "  cd $SCRIPT_DIR && terraform destroy -auto-approve"
 log ""
 log "🐕 GOOD LUCK!"

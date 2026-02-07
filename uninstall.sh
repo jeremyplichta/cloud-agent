@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Cloud Auggie CLI uninstaller
+# Cloud Agent CLI uninstaller
 # Removes the 'ca' command from your shell
 #
 
@@ -24,20 +24,20 @@ detect_shell_config() {
 SHELL_CONFIG=$(detect_shell_config)
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  🐕 CLOUD AUGGIE CLI UNINSTALLER                             ║"
+echo "║  🐕 CLOUD AGENT CLI UNINSTALLER                             ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-if grep -q "# Cloud Auggie - run deploy.sh from anywhere" "$SHELL_CONFIG" 2>/dev/null; then
-    # Remove the Cloud Auggie function block
-    sed -i.bak '/# Cloud Auggie - run deploy.sh from anywhere/,/^}/d' "$SHELL_CONFIG"
+if grep -q "# Cloud Agent - run deploy.sh from anywhere" "$SHELL_CONFIG" 2>/dev/null; then
+    # Remove the Cloud Agent function block
+    sed -i.bak '/# Cloud Agent - run deploy.sh from anywhere/,/^}/d' "$SHELL_CONFIG"
     # Clean up any empty lines that might be left behind
-    echo "✅ Removed Cloud Auggie command from $SHELL_CONFIG"
+    echo "✅ Removed Cloud Agent command from $SHELL_CONFIG"
     echo ""
     echo "Restart your terminal or run:"
     echo "  source $SHELL_CONFIG"
 else
-    echo "⚠️  Cloud Auggie command not found in $SHELL_CONFIG"
+    echo "⚠️  Cloud Agent command not found in $SHELL_CONFIG"
     echo "   Nothing to uninstall."
 fi
 echo ""

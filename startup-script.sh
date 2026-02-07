@@ -2,14 +2,14 @@
 
 set -e
 
-LOG="/var/log/cloud-auggie-startup.log"
+LOG="/var/log/cloud-agent-startup.log"
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"
 }
 
 log "╔══════════════════════════════════════════════════════════════╗"
-log "║  🐕 CLOUD AUGGIE STARTUP - INITIALIZING                      ║"
+log "║  🐕 CLOUD AGENT STARTUP - INITIALIZING                      ║"
 log "╚══════════════════════════════════════════════════════════════╝"
 
 # Update system
@@ -68,7 +68,7 @@ cd /workspace
 # Prepare workspace README
 log "Preparing workspace..."
 cat > /workspace/README.md << EOF
-# Cloud Auggie Workspace
+# Cloud Agent Workspace
 
 This VM is ready to run Augment AI.
 
@@ -97,7 +97,7 @@ This VM is ready to run Augment AI.
 
 EOF
 
-log "✅ Cloud Auggie VM initialized successfully!"
+log "✅ Cloud Agent VM initialized successfully!"
 log ""
 log "Next steps:"
 log "1. Transfer project files to /workspace/"

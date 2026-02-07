@@ -46,8 +46,8 @@ hook_transfer_credentials() {
     local temp_file=$(mktemp)
     echo "$token" > "$temp_file"
     
-    gcloud compute scp "$temp_file" cloud-auggie:~/.claude.json --zone="$zone" 2>/dev/null
-    gcloud compute ssh cloud-auggie --zone="$zone" --command="
+    gcloud compute scp "$temp_file" cloud-agent:~/.claude.json --zone="$zone" 2>/dev/null
+    gcloud compute ssh cloud-agent --zone="$zone" --command="
         chmod 600 ~/.claude.json
         mkdir -p ~/.claude
         echo '✅ Claude Code credentials configured'

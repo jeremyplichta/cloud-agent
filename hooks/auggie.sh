@@ -37,7 +37,7 @@ hook_transfer_credentials() {
     local zone="$1"
     local token="$2"
     
-    gcloud compute ssh cloud-auggie --zone="$zone" --command="
+    gcloud compute ssh cloud-agent --zone="$zone" --command="
         mkdir -p ~/.augment
         echo '$token' > ~/.augment/session.json
         chmod 600 ~/.augment/session.json

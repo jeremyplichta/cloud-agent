@@ -1,16 +1,16 @@
-# Cloud Auggie 🐕☁️
+# Cloud Agent 🐕☁️
 
 **Remote GCP VM for running AI coding agents on long-running tasks**
 
-## What is Cloud Auggie?
+## What is Cloud Agent?
 
-Cloud Auggie is a GCP VM that lets you:
+Cloud Agent is a GCP VM that lets you:
 - Run AI coding agents (Auggie, Claude Code, etc.) remotely and close your laptop
 - Clone multiple git repos and work on them in the cloud
 - Let the agent commit and push changes back to GitHub
 - Access GCP resources (compute, GKE, storage) from the cloud
 
-Perfect for tasks that take hours - deploy Cloud Auggie, start your task in tmux, detach, and check back later.
+Perfect for tasks that take hours - deploy Cloud Agent, start your task in tmux, detach, and check back later.
 
 ## Supported Agents
 
@@ -25,15 +25,15 @@ Want to add support for another agent? See [Adding New Agent Hooks](#adding-new-
 
 ### Install the Agent Skill (Recommended)
 
-Install the Cloud Auggie skill so AI agents know how to deploy to cloud VMs:
+Install the Cloud Agent skill so AI agents know how to deploy to cloud VMs:
 
 ```bash
 # Install to all agents (Claude Code, Cursor, Copilot, Augment, etc.)
 # Use SSH URL to avoid password prompts:
-npx ai-agent-skills install git@github.com:jeremyplichta/cloud-auggie.git
+npx ai-agent-skills install git@github.com:jeremyplichta/cloud-agent.git
 
 # Or install to a specific agent only
-npx ai-agent-skills install git@github.com:jeremyplichta/cloud-auggie.git --agent claude
+npx ai-agent-skills install git@github.com:jeremyplichta/cloud-agent.git --agent claude
 ```
 
 > **Note:** Using the SSH URL (`git@github.com:...`) avoids username/password prompts if you have SSH keys configured with GitHub.
@@ -42,12 +42,12 @@ This uses the [universal skills installer](https://github.com/skillcreatorai/Ai-
 
 ### Install the `ca` Command
 
-Install the `ca` command to run Cloud Auggie from anywhere:
+Install the `ca` command to run Cloud Agent from anywhere:
 
 ```bash
 # Clone the repo
-git clone git@github.com:jeremyplichta/cloud-auggie.git
-cd cloud-auggie
+git clone git@github.com:jeremyplichta/cloud-agent.git
+cd cloud-agent
 
 # Install the ca command
 ./install.sh
@@ -89,27 +89,27 @@ SSH keys work with enterprise GitHub orgs where fine-grained PATs aren't availab
 
 ```bash
 # 1. Generate a dedicated key (no passphrase)
-ssh-keygen -t ed25519 -f ~/.ssh/cloud-auggie -C "cloud-auggie" -N ""
+ssh-keygen -t ed25519 -f ~/.ssh/cloud-agent -C "cloud-agent" -N ""
 
 # 2. Add to GitHub using gh CLI
-gh ssh-key add ~/.ssh/cloud-auggie.pub --title "cloud-auggie"
+gh ssh-key add ~/.ssh/cloud-agent.pub --title "cloud-agent"
 
 # 3. Login to your agent locally
 auggie login          # For Auggie
 # or run 'claude' and complete login for Claude Code
 
 # 4. Deploy with SSH key (defaults to Auggie)
-SSH_KEY=~/.ssh/cloud-auggie ./deploy.sh git@github.com:your-org/your-repo.git
+SSH_KEY=~/.ssh/cloud-agent ./deploy.sh git@github.com:your-org/your-repo.git
 
 # Or deploy with Claude Code
-SSH_KEY=~/.ssh/cloud-auggie ./deploy.sh --agent claude git@github.com:your-org/your-repo.git
+SSH_KEY=~/.ssh/cloud-agent ./deploy.sh --agent claude git@github.com:your-org/your-repo.git
 ```
 
 **Cleanup:** Remove the key when done:
 ```bash
 gh ssh-key list                  # Find the key ID
 gh ssh-key delete <key-id>       # Delete from GitHub
-rm ~/.ssh/cloud-auggie*          # Delete local files
+rm ~/.ssh/cloud-agent*          # Delete local files
 ```
 
 ### Option B: GitHub PAT (For Personal Repos)
@@ -120,19 +120,19 @@ Fine-grained PATs work for repos in your personal GitHub account.
 2. Generate token with: Contents (Read/Write), Metadata (Read)
 3. Save it:
    ```bash
-   echo "github_pat_xxxx" > ~/.github-cloud-auggie-token
-   chmod 600 ~/.github-cloud-auggie-token
+   echo "github_pat_xxxx" > ~/.github-cloud-agent-token
+   chmod 600 ~/.github-cloud-agent-token
    ```
 4. Deploy:
    ```bash
    auggie login
-   GITHUB_TOKEN_FILE=~/.github-cloud-auggie-token ./deploy.sh https://github.com/youruser/yourrepo.git
+   GITHUB_TOKEN_FILE=~/.github-cloud-agent-token ./deploy.sh https://github.com/youruser/yourrepo.git
    ```
 
 ### 4. SSH and Start Working
 
 ```bash
-gcloud compute ssh cloud-auggie --zone=us-central1-a
+gcloud compute ssh cloud-agent --zone=us-central1-a
 
 # On the VM:
 cd /workspace/yourrepo
@@ -145,7 +145,7 @@ auggie
 The agent can commit and push directly to GitHub:
 ```bash
 git checkout -b feature/ai-changes
-git add . && git commit -m "Changes from cloud-auggie"
+git add . && git commit -m "Changes from cloud-agent"
 git push -u origin feature/ai-changes
 ```
 
@@ -153,10 +153,10 @@ git push -u origin feature/ai-changes
 
 ```bash
 # SSH key
-SSH_KEY=~/.ssh/cloud-auggie ./deploy.sh --skip-vm git@github.com:org/another-repo.git
+SSH_KEY=~/.ssh/cloud-agent ./deploy.sh --skip-vm git@github.com:org/another-repo.git
 
 # Or with PAT
-GITHUB_TOKEN_FILE=~/.github-cloud-auggie-token ./deploy.sh --skip-vm https://github.com/user/repo.git
+GITHUB_TOKEN_FILE=~/.github-cloud-agent-token ./deploy.sh --skip-vm https://github.com/user/repo.git
 ```
 
 ## Usage Reference
@@ -224,7 +224,7 @@ terraform destroy -auto-approve
 
 ## Adding New Agent Hooks
 
-Cloud Auggie uses a hook system to support different AI coding agents. Each agent has a hook file in the `hooks/` directory that handles credential detection and transfer.
+Cloud Agent uses a hook system to support different AI coding agents. Each agent has a hook file in the `hooks/` directory that handles credential detection and transfer.
 
 ### Hook File Structure
 
@@ -265,7 +265,7 @@ hook_transfer_credentials() {
     local zone="$1"
     local token="$2"
 
-    gcloud compute ssh cloud-auggie --zone="$zone" --command="
+    gcloud compute ssh cloud-agent --zone="$zone" --command="
         mkdir -p ~/.your-agent
         echo '$token' > ~/.your-agent/credentials.json
         chmod 600 ~/.your-agent/credentials.json

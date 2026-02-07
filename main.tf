@@ -14,41 +14,41 @@ provider "google" {
   zone    = var.zone
 }
 
-# Service account for cloud-auggie VM with full permissions
-resource "google_service_account" "cloud_auggie" {
-  account_id   = "cloud-auggie-sa"
-  display_name = "Cloud Auggie Service Account"
-  description  = "Service account for cloud-auggie VM to manage GCP resources"
+# Service account for cloud-agent VM with full permissions
+resource "google_service_account" "cloud_agent" {
+  account_id   = "cloud-agent-sa"
+  display_name = "Cloud Agent Service Account"
+  description  = "Service account for cloud-agent VM to manage GCP resources"
 }
 
 # Grant necessary IAM roles
-resource "google_project_iam_member" "cloud_auggie_compute_admin" {
+resource "google_project_iam_member" "cloud_agent_compute_admin" {
   project = var.project_id
   role    = "roles/compute.admin"
-  member  = "serviceAccount:${google_service_account.cloud_auggie.email}"
+  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
 }
 
-resource "google_project_iam_member" "cloud_auggie_container_admin" {
+resource "google_project_iam_member" "cloud_agent_container_admin" {
   project = var.project_id
   role    = "roles/container.admin"
-  member  = "serviceAccount:${google_service_account.cloud_auggie.email}"
+  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
 }
 
-resource "google_project_iam_member" "cloud_auggie_storage_admin" {
+resource "google_project_iam_member" "cloud_agent_storage_admin" {
   project = var.project_id
   role    = "roles/storage.admin"
-  member  = "serviceAccount:${google_service_account.cloud_auggie.email}"
+  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
 }
 
-resource "google_project_iam_member" "cloud_auggie_iam_admin" {
+resource "google_project_iam_member" "cloud_agent_iam_admin" {
   project = var.project_id
   role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${google_service_account.cloud_auggie.email}"
+  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
 }
 
-# Cloud Auggie VM instance
-resource "google_compute_instance" "cloud_auggie" {
-  name         = "cloud-auggie"
+# Cloud Agent VM instance
+resource "google_compute_instance" "cloud_agent" {
+  name         = "cloud-agent"
   machine_type = var.machine_type
   zone         = var.zone
 
@@ -68,7 +68,7 @@ resource "google_compute_instance" "cloud_auggie" {
   }
 
   service_account {
-    email  = google_service_account.cloud_auggie.email
+    email  = google_service_account.cloud_agent.email
     scopes = ["cloud-platform"]
   }
 
@@ -78,16 +78,16 @@ resource "google_compute_instance" "cloud_auggie" {
     cluster_zone = var.cluster_zone
   })
 
-  tags = ["cloud-auggie"]
+  tags = ["cloud-agent"]
 
   labels = {
-    purpose = "cloud-auggie"
+    purpose = "cloud-agent"
   }
 }
 
 # Firewall rule to allow SSH
-resource "google_compute_firewall" "cloud_auggie_ssh" {
-  name    = "cloud-auggie-allow-ssh"
+resource "google_compute_firewall" "cloud_agent_ssh" {
+  name    = "cloud-agent-allow-ssh"
   network = "default"
 
   allow {
@@ -96,26 +96,26 @@ resource "google_compute_firewall" "cloud_auggie_ssh" {
   }
 
   source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["cloud-auggie"]
+  target_tags   = ["cloud-agent"]
 }
 
-output "cloud_auggie_ip" {
-  value       = google_compute_instance.cloud_auggie.network_interface[0].access_config[0].nat_ip
-  description = "External IP of cloud-auggie VM"
+output "cloud_agent_ip" {
+  value       = google_compute_instance.cloud_agent.network_interface[0].access_config[0].nat_ip
+  description = "External IP of cloud-agent VM"
 }
 
-output "cloud_auggie_internal_ip" {
-  value       = google_compute_instance.cloud_auggie.network_interface[0].network_ip
-  description = "Internal IP of cloud-auggie VM"
+output "cloud_agent_internal_ip" {
+  value       = google_compute_instance.cloud_agent.network_interface[0].network_ip
+  description = "Internal IP of cloud-agent VM"
 }
 
 output "ssh_command" {
-  value       = "gcloud compute ssh cloud-auggie --zone=${var.zone}"
-  description = "Command to SSH into cloud-auggie VM"
+  value       = "gcloud compute ssh cloud-agent --zone=${var.zone}"
+  description = "Command to SSH into cloud-agent VM"
 }
 
 output "service_account_email" {
-  value       = google_service_account.cloud_auggie.email
-  description = "Service account email for cloud-auggie"
+  value       = google_service_account.cloud_agent.email
+  description = "Service account email for cloud-agent"
 }
 

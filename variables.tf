@@ -10,13 +10,13 @@ variable "region" {
 }
 
 variable "zone" {
-  description = "GCP zone for cloud-auggie VM"
+  description = "GCP zone for cloud-agent VM"
   type        = string
   default     = "us-central1-a"
 }
 
 variable "machine_type" {
-  description = "Machine type for cloud-auggie VM"
+  description = "Machine type for cloud-agent VM"
   type        = string
   default     = "n2-standard-4"
 }

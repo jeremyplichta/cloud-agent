@@ -1,11 +1,11 @@
 #!/bin/bash
-# Install the cloud-auggie skill to your personal skills directory
+# Install the cloud-agent skill to your personal skills directory
 # This makes the skill available across all your projects
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_NAME="cloud-auggie"
+SKILL_NAME="cloud-agent"
 SKILL_SOURCE="$SCRIPT_DIR/skills/$SKILL_NAME"
 
 # Determine which skills directory to use
@@ -26,7 +26,7 @@ install_skill() {
 # Check if source skill exists
 if [ ! -d "$SKILL_SOURCE" ]; then
     echo "Error: Skill source not found at $SKILL_SOURCE"
-    echo "Make sure you're running this from the cloud-auggie repository root."
+    echo "Make sure you're running this from the cloud-agent repository root."
     exit 1
 fi
 
@@ -51,7 +51,7 @@ echo "  - Claude Code (restart to discover)"
 echo "  - VS Code Copilot (if ~/.copilot exists)"
 echo ""
 echo "Usage: When working in any project, you can now ask your AI agent to"
-echo "       'hand off to cloud-auggie' or 'deploy to cloud VM' and it will"
+echo "       'hand off to cloud-agent' or 'deploy to cloud VM' and it will"
 echo "       know how to commit, push, and deploy your work."
 echo ""
 echo "To uninstall:"

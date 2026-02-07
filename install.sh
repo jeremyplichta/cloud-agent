@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Cloud Auggie CLI installer
+# Cloud Agent CLI installer
 # Adds the 'ca' command to your shell for easy access from anywhere
 #
 
@@ -28,24 +28,24 @@ SHELL_CONFIG=$(detect_shell_config)
 SHELL_NAME=$(basename "$SHELL")
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  🐕 CLOUD AUGGIE CLI INSTALLER                               ║"
+echo "║  🐕 CLOUD AGENT CLI INSTALLER                               ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Installing '$COMMAND_NAME' command..."
-echo "  Cloud Auggie directory: $SCRIPT_DIR"
+echo "  Cloud Agent directory: $SCRIPT_DIR"
 echo "  Shell config: $SHELL_CONFIG"
 echo ""
 
 # Create the function definition
 FUNCTION_DEF="
-# Cloud Auggie - run deploy.sh from anywhere
+# Cloud Agent - run deploy.sh from anywhere
 $COMMAND_NAME() {
     \"$SCRIPT_DIR/deploy.sh\" \"\$@\"
 }"
 
 # Check if already installed
-if grep -q "# Cloud Auggie - run deploy.sh from anywhere" "$SHELL_CONFIG" 2>/dev/null; then
-    echo "⚠️  Cloud Auggie command already installed in $SHELL_CONFIG"
+if grep -q "# Cloud Agent - run deploy.sh from anywhere" "$SHELL_CONFIG" 2>/dev/null; then
+    echo "⚠️  Cloud Agent command already installed in $SHELL_CONFIG"
     echo ""
     read -p "Reinstall/update? [y/N] " -n 1 -r
     echo ""
@@ -54,7 +54,7 @@ if grep -q "# Cloud Auggie - run deploy.sh from anywhere" "$SHELL_CONFIG" 2>/dev
         exit 0
     fi
     # Remove old installation
-    sed -i.bak '/# Cloud Auggie - run deploy.sh from anywhere/,/^}/d' "$SHELL_CONFIG"
+    sed -i.bak '/# Cloud Agent - run deploy.sh from anywhere/,/^}/d' "$SHELL_CONFIG"
     echo "Removed old installation."
 fi
 
