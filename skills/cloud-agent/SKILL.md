@@ -58,7 +58,17 @@ ls ~/.cloud-agent/hooks/
 
 Verify your agent's hook file exists (e.g., `auggie.sh` or `claude.sh`). If not, the agent is not supported.
 
-### 4. Check GCP credentials
+### 4. Check Terraform is installed
+
+```bash
+which terraform && terraform version
+```
+
+If Terraform is NOT found, install it:
+- **macOS**: `brew install terraform`
+- **Linux**: See https://developer.hashicorp.com/terraform/install
+
+### 5. Check GCP credentials
 
 ```bash
 gcloud auth list
@@ -69,7 +79,7 @@ If not authenticated, run:
 gcloud auth login
 ```
 
-### 5. Check SSH key for GitHub
+### 6. Check SSH key for GitHub
 
 ```bash
 ls ~/.ssh/cloud-agent 2>/dev/null || ls ~/.ssh/id_ed25519 2>/dev/null
