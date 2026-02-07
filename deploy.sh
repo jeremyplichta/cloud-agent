@@ -210,17 +210,16 @@ if [ "$SKIP_CREDS" = false ]; then
         # Use provided token
         :
     elif command -v auggie &> /dev/null; then
-        AUGMENT_TOKEN=$(auggie tokens print 2>/dev/null || true)
+        # Extract just the JSON token from auggie tokens print output
+        AUGMENT_TOKEN=$(auggie tokens print 2>/dev/null | grep -o '{.*}' | head -1 || true)
     fi
 
     if [ -n "$AUGMENT_TOKEN" ]; then
         log "Transferring Augment credentials..."
         gcloud compute ssh cloud-auggie --zone="$ZONE" --command="
-            echo '$AUGMENT_TOKEN' > ~/.augment-token
-            chmod 600 ~/.augment-token
-            if ! grep -q 'AUGMENT_SESSION_AUTH' ~/.bashrc; then
-                echo 'export AUGMENT_SESSION_AUTH=\"\$(cat ~/.augment-token)\"' >> ~/.bashrc
-            fi
+            mkdir -p ~/.augment
+            echo '$AUGMENT_TOKEN' > ~/.augment/session.json
+            chmod 600 ~/.augment/session.json
             echo '✅ Augment credentials configured'
         " 2>/dev/null
         log "✅ Augment credentials transferred"
