@@ -1,0 +1,13 @@
+# Copy this file to terraform.tfvars and fill in your values
+# cp terraform.tfvars.example terraform.tfvars
+
+project_id   = "your-gcp-project-id"
+region       = "us-central1"
+zone         = "us-central1-a"
+machine_type = "n2-standard-4"
+
+# Optional: GKE cluster configuration
+# If set, kubectl will be pre-configured to access this cluster
+# cluster_name = "your-gke-cluster-name"
+# cluster_zone = "us-central1-a"
+
