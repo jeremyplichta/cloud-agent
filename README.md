@@ -20,11 +20,14 @@ Install the Cloud Auggie skill so AI agents know how to deploy to cloud VMs:
 
 ```bash
 # Install to all agents (Claude Code, Cursor, Copilot, Augment, etc.)
-npx ai-agent-skills install jeremyplichta/cloud-auggie
+# Use SSH URL to avoid password prompts:
+npx ai-agent-skills install git@github.com:jeremyplichta/cloud-auggie.git
 
 # Or install to a specific agent only
-npx ai-agent-skills install jeremyplichta/cloud-auggie --agent claude
+npx ai-agent-skills install git@github.com:jeremyplichta/cloud-auggie.git --agent claude
 ```
+
+> **Note:** Using the SSH URL (`git@github.com:...`) avoids username/password prompts if you have SSH keys configured with GitHub.
 
 This uses the [universal skills installer](https://github.com/skillcreatorai/Ai-Agent-Skills) that works with Claude Code, Cursor, VS Code Copilot, Augment/Auggie, Gemini CLI, and more.
 
