@@ -1,16 +1,25 @@
 # Cloud Auggie 🐕☁️
 
-**Remote GCP VM for running Augment AI on long-running tasks**
+**Remote GCP VM for running AI coding agents on long-running tasks**
 
 ## What is Cloud Auggie?
 
 Cloud Auggie is a GCP VM that lets you:
-- Run Augment remotely and close your laptop
+- Run AI coding agents (Auggie, Claude Code, etc.) remotely and close your laptop
 - Clone multiple git repos and work on them in the cloud
 - Let the agent commit and push changes back to GitHub
 - Access GCP resources (compute, GKE, storage) from the cloud
 
 Perfect for tasks that take hours - deploy Cloud Auggie, start your task in tmux, detach, and check back later.
+
+## Supported Agents
+
+| Agent | Status | Command |
+|-------|--------|---------|
+| [Auggie](https://www.augmentcode.com/) (Augment CLI) | ✅ Supported | `--agent auggie` (default) |
+| [Claude Code](https://claude.ai/code) | ✅ Supported | `--agent claude` |
+
+Want to add support for another agent? See [Adding New Agent Hooks](#adding-new-agent-hooks) below.
 
 ## Installation
 
@@ -67,7 +76,9 @@ To uninstall:
 
 - Google Cloud SDK (`gcloud`) installed and configured
 - Terraform installed
-- Auggie CLI installed locally (`npm install -g @augmentcode/auggie`)
+- Your chosen agent CLI installed and logged in locally:
+  - **Auggie**: `npm install -g @augmentcode/auggie` then `auggie login`
+  - **Claude Code**: `npm install -g @anthropic-ai/claude-code` then run `claude` to login
 - GitHub authentication (SSH key or PAT - see below)
 
 ## Quick Start
@@ -83,11 +94,15 @@ ssh-keygen -t ed25519 -f ~/.ssh/cloud-auggie -C "cloud-auggie" -N ""
 # 2. Add to GitHub using gh CLI
 gh ssh-key add ~/.ssh/cloud-auggie.pub --title "cloud-auggie"
 
-# 3. Login to Augment
-auggie login
+# 3. Login to your agent locally
+auggie login          # For Auggie
+# or run 'claude' and complete login for Claude Code
 
-# 4. Deploy with SSH key
+# 4. Deploy with SSH key (defaults to Auggie)
 SSH_KEY=~/.ssh/cloud-auggie ./deploy.sh git@github.com:your-org/your-repo.git
+
+# Or deploy with Claude Code
+SSH_KEY=~/.ssh/cloud-auggie ./deploy.sh --agent claude git@github.com:your-org/your-repo.git
 ```
 
 **Cleanup:** Remove the key when done:
@@ -156,12 +171,14 @@ Arguments:
               HTTPS: https://github.com/org/repo.git
 
 Options:
+  --agent NAME      Agent to use: auggie (default), claude
   --create-vm       Force VM creation even if it exists
   --skip-vm         Skip VM creation, only deploy repos
   --skip-creds      Skip credential transfer
   -h, --help        Show help
 
 Environment Variables:
+  AGENT             Agent to use (same as --agent)
   SSH_KEY           Path to SSH private key (for enterprise)
   GITHUB_TOKEN      GitHub PAT for cloning/pushing (for personal)
   GITHUB_TOKEN_FILE Path to file containing GitHub PAT
@@ -181,7 +198,7 @@ tmux ls                 # List sessions
 
 ## What Gets Installed on the VM
 
-- Node.js 22 + Auggie CLI
+- Node.js 22 + your chosen agent CLI
 - Git (with your GitHub credentials)
 - kubectl, gcloud SDK
 - tmux, vim, jq, python3
@@ -189,7 +206,7 @@ tmux ls                 # List sessions
 ## Security Notes
 
 - **GitHub PAT:** Use fine-grained tokens scoped to specific repos only
-- **Augment Token:** Stored securely in `~/.augment-token`
+- **Agent Credentials:** Stored securely in agent-specific locations
 - **Credentials:** Never committed to git (see `.gitignore`)
 
 ## Cleanup
@@ -202,6 +219,100 @@ terraform destroy -auto-approve
 
 - **VM cost:** ~$0.19/hour (n2-standard-4)
 - **Recommendation:** Destroy when not actively using
+
+---
+
+## Adding New Agent Hooks
+
+Cloud Auggie uses a hook system to support different AI coding agents. Each agent has a hook file in the `hooks/` directory that handles credential detection and transfer.
+
+### Hook File Structure
+
+Create a new file `hooks/<agent-name>.sh`:
+
+```bash
+#!/bin/bash
+# Agent Hook: Your Agent Name
+# This hook handles credential transfer for Your Agent
+
+# Required variables
+HOOK_NAME="agent-name"                    # Short name (used in --agent flag)
+HOOK_DISPLAY_NAME="Your Agent Name"       # Display name for logs
+HOOK_CLI_COMMAND="agent-cli"              # CLI command name
+HOOK_INSTALL_COMMAND="npm install -g your-agent"  # Install instructions
+
+# Check if the agent CLI is available locally
+hook_check_local() {
+    command -v "$HOOK_CLI_COMMAND" &> /dev/null
+}
+
+# Check if the agent is logged in locally
+hook_check_logged_in() {
+    # Return 0 if logged in, 1 if not
+    # Example: check for credential file or run a command
+    [ -f ~/.your-agent/credentials.json ]
+}
+
+# Get the credential token/data to transfer
+hook_get_token() {
+    # Output the credential data (will be passed to hook_transfer_credentials)
+    cat ~/.your-agent/credentials.json
+}
+
+# Transfer credentials to the remote VM
+# Arguments: $1 = zone, $2 = token/credential data
+hook_transfer_credentials() {
+    local zone="$1"
+    local token="$2"
+
+    gcloud compute ssh cloud-auggie --zone="$zone" --command="
+        mkdir -p ~/.your-agent
+        echo '$token' > ~/.your-agent/credentials.json
+        chmod 600 ~/.your-agent/credentials.json
+        echo '✅ Your Agent credentials configured'
+    " 2>/dev/null
+}
+
+# Get the command to run the agent on the VM
+hook_agent_command() {
+    echo "$HOOK_CLI_COMMAND"
+}
+
+# Get login instructions for the user
+hook_login_instructions() {
+    echo "Run '$HOOK_CLI_COMMAND login' locally first."
+}
+```
+
+### Required Functions
+
+| Function | Purpose |
+|----------|---------|
+| `hook_check_local` | Returns 0 if CLI is installed locally |
+| `hook_check_logged_in` | Returns 0 if user is logged in |
+| `hook_get_token` | Outputs credential data to transfer |
+| `hook_transfer_credentials` | Transfers credentials to VM |
+| `hook_agent_command` | Returns the command to run the agent |
+| `hook_login_instructions` | Returns login help message |
+
+### Testing Your Hook
+
+```bash
+# Test with your new agent
+./deploy.sh --agent your-agent git@github.com:org/repo.git
+
+# Or using environment variable
+AGENT=your-agent ./deploy.sh git@github.com:org/repo.git
+```
+
+### Contributing
+
+1. Create your hook file in `hooks/`
+2. Test it works with `--agent your-agent`
+3. Update the "Supported Agents" table in this README
+4. Submit a PR!
+
+---
 
 ## 🐕 Happy Hacking!
 

@@ -10,11 +10,28 @@ Use this skill when the user needs to:
 - Hand off a long-running task to a cloud instance
 - Continue a coding session from another machine
 
+## Supported Agents
+
+Cloud Auggie supports multiple AI coding agents. You MUST determine which agent you are and use the correct `--agent` flag:
+
+| Agent | Hook Name | How to Detect |
+|-------|-----------|---------------|
+| Auggie (Augment CLI) | `auggie` | You are running as `auggie` CLI |
+| Claude Code | `claude` | You are running as `claude` CLI or Claude Code |
+
+**IMPORTANT**: If you are not one of the supported agents listed above, STOP and inform the user that their agent is not yet supported. Direct them to the README for instructions on adding a new agent hook.
+
 ## Prerequisites Check
 
 Before deploying, verify these prerequisites are met:
 
-### 1. Check if `ca` command is installed
+### 1. Determine which agent you are
+
+First, identify yourself:
+- If you are **Auggie** (Augment CLI agent): use `--agent auggie` (or omit, it's the default)
+- If you are **Claude Code**: use `--agent claude`
+
+### 2. Check if `ca` command is installed
 
 ```bash
 which ca || type ca
@@ -33,7 +50,15 @@ cd ~/.cloud-auggie && ./install.sh
 source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null
 ```
 
-### 2. Check GCP credentials
+### 3. Check that your agent hook exists
+
+```bash
+ls ~/.cloud-auggie/hooks/
+```
+
+Verify your agent's hook file exists (e.g., `auggie.sh` or `claude.sh`). If not, the agent is not supported.
+
+### 4. Check GCP credentials
 
 ```bash
 gcloud auth list
@@ -44,7 +69,7 @@ If not authenticated, run:
 gcloud auth login
 ```
 
-### 3. Check SSH key for GitHub
+### 5. Check SSH key for GitHub
 
 ```bash
 ls ~/.ssh/cloud-auggie 2>/dev/null || ls ~/.ssh/id_ed25519 2>/dev/null
@@ -92,24 +117,29 @@ This should return something like `git@github.com:org/repo.git`
 
 ### Step 3: Deploy to Cloud VM
 
-Run the `ca` command to deploy:
+Run the `ca` command to deploy. **You MUST pass the correct `--agent` flag for your agent type:**
 
 ```bash
-# Basic deployment (uses default SSH key at ~/.ssh/cloud-auggie)
-ca git@github.com:org/repo.git
+# For Auggie (default, can omit --agent)
+ca --agent auggie git@github.com:org/repo.git
 
-# Or with explicit SSH key
-SSH_KEY=~/.ssh/your-key ca git@github.com:org/repo.git
+# For Claude Code
+ca --agent claude git@github.com:org/repo.git
+
+# With explicit SSH key
+SSH_KEY=~/.ssh/your-key ca --agent <your-agent> git@github.com:org/repo.git
 
 # Optional: specify zone or machine type
-ZONE=us-central1-a MACHINE_TYPE=n1-standard-4 ca git@github.com:org/repo.git
+ZONE=us-central1-a MACHINE_TYPE=n1-standard-4 ca --agent <your-agent> git@github.com:org/repo.git
 ```
+
+**Replace `<your-agent>` with your agent hook name: `auggie` or `claude`**
 
 The deployment will:
 - Create a GCP VM named `cloud-auggie`
-- Transfer SSH keys and credentials
+- Transfer SSH keys and your agent's credentials
 - Clone the repository at the current branch
-- Start an Augment AI session in tmux
+- Install your agent CLI on the VM
 
 ### Step 4: Provide Handoff Instructions
 
@@ -137,27 +167,31 @@ ca --destroy
 
 **User**: "I need to catch a flight in 30 minutes but this refactoring isn't done"
 
-**Agent Response**:
-1. Commit current changes with descriptive message
-2. Create/switch to a feature branch if on main
-3. Push to remote
-4. Run: `ca git@github.com:org/repo.git`
-5. Provide reconnection instructions
-6. Remind user to run `ca --destroy` when done
+**Agent Response** (example for Claude Code agent):
+1. Verify you are a supported agent (Claude Code → use `--agent claude`)
+2. Commit current changes with descriptive message
+3. Create/switch to a feature branch if on main
+4. Push to remote
+5. Run: `ca --agent claude git@github.com:org/repo.git`
+6. Provide reconnection instructions
+7. Remind user to run `ca --destroy` when done
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `AGENT` | Agent hook to use | `auggie` |
 | `SSH_KEY` | Path to SSH private key | `~/.ssh/cloud-auggie` |
 | `ZONE` | GCP zone for the VM | `us-central1-a` |
-| `MACHINE_TYPE` | GCP machine type | `n1-standard-2` |
+| `MACHINE_TYPE` | GCP machine type | `n2-standard-4` |
 | `GITHUB_TOKEN` | GitHub PAT (or use `GITHUB_TOKEN_FILE`) | - |
 
 ## Notes
 
+- **You MUST use the correct `--agent` flag for your agent type**
 - The cloud VM clones the repo at the **current branch** you pushed
 - Work done on the VM needs to be committed and pushed back
 - The tmux session is named `auggie` - use `tmux attach -t auggie` to reconnect
 - Default VM location is `us-central1-a` - adjust `ZONE` if needed for latency
+- If your agent is not supported, inform the user and direct them to add a new hook
 

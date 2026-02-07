@@ -3,9 +3,35 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOKS_DIR="$SCRIPT_DIR/hooks"
 
 log() {
     echo "[$(date +'%H:%M:%S')] $1"
+}
+
+# List available agent hooks
+list_agents() {
+    local agents=()
+    for hook in "$HOOKS_DIR"/*.sh; do
+        if [ -f "$hook" ]; then
+            agents+=("$(basename "$hook" .sh)")
+        fi
+    done
+    echo "${agents[*]}"
+}
+
+# Load an agent hook
+load_agent_hook() {
+    local agent="$1"
+    local hook_file="$HOOKS_DIR/${agent}.sh"
+
+    if [ ! -f "$hook_file" ]; then
+        log "❌ ERROR: Unknown agent '$agent'"
+        log "   Available agents: $(list_agents)"
+        exit 1
+    fi
+
+    source "$hook_file"
 }
 
 usage() {
@@ -20,24 +46,30 @@ Arguments:
               HTTPS: https://github.com/org/repo.git
 
 Options:
+  --agent NAME      Agent to use (default: auggie)
+                    Available: $(list_agents)
   --create-vm       Force VM creation even if it exists
   --skip-vm         Skip VM creation, only deploy repos (VM must exist)
   --skip-creds      Skip credential transfer
   -h, --help        Show this help message
 
 Environment Variables:
+  AGENT             Agent to use (same as --agent)
   SSH_KEY           Path to SSH private key for GitHub (recommended for enterprise)
                     Example: SSH_KEY=~/.ssh/cloud-auggie
   GITHUB_TOKEN      GitHub PAT for HTTPS cloning (for personal repos)
   GITHUB_TOKEN_FILE Path to file containing GitHub PAT
-  AUGMENT_TOKEN     Augment session token (or uses 'auggie tokens print')
   ZONE              GCP zone (default: us-central1-a)
   MACHINE_TYPE      VM machine type (default: n2-standard-4)
   CLUSTER_NAME      Optional GKE cluster name for kubectl config
 
 Examples:
-  # Using SSH key (recommended for enterprise)
-  SSH_KEY=~/.ssh/cloud-auggie $0 git@github.com:enterprise-org/repo.git
+  # Deploy with Auggie (default)
+  SSH_KEY=~/.ssh/cloud-auggie $0 git@github.com:org/repo.git
+
+  # Deploy with Claude Code
+  AGENT=claude SSH_KEY=~/.ssh/cloud-auggie $0 git@github.com:org/repo.git
+  # Or: $0 --agent claude git@github.com:org/repo.git
 
   # Generate a dedicated key for cloud-auggie
   ssh-keygen -t ed25519 -f ~/.ssh/cloud-auggie -C "cloud-auggie"
@@ -59,9 +91,14 @@ EOF
 CREATE_VM="auto"
 SKIP_CREDS=false
 REPOS=()
+AGENT="${AGENT:-auggie}"  # Default to auggie
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --agent)
+            AGENT="$2"
+            shift 2
+            ;;
         --create-vm)
             CREATE_VM="yes"
             shift
@@ -88,9 +125,28 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Load the agent hook
+load_agent_hook "$AGENT"
+
 log "╔══════════════════════════════════════════════════════════════╗"
 log "║  🐕 CLOUD AUGGIE DEPLOYMENT                                  ║"
 log "╚══════════════════════════════════════════════════════════════╝"
+log "Agent: $HOOK_DISPLAY_NAME"
+
+# Check agent prerequisites
+if ! hook_check_local; then
+    log "❌ ERROR: $HOOK_DISPLAY_NAME CLI not found locally."
+    log "   Install it with: $HOOK_INSTALL_COMMAND"
+    exit 1
+fi
+
+if ! hook_check_logged_in; then
+    log "❌ ERROR: Not logged in to $HOOK_DISPLAY_NAME."
+    log "   $(hook_login_instructions)"
+    exit 1
+fi
+
+log "✓ $HOOK_DISPLAY_NAME CLI found and logged in"
 
 # Get GCP project ID
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
@@ -205,26 +261,16 @@ if [ "$SKIP_CREDS" = false ]; then
         log "   For personal:   GITHUB_TOKEN=xxx ./deploy.sh https://github.com/user/repo.git"
     fi
 
-    # Augment credentials
-    if [ -n "$AUGMENT_TOKEN" ]; then
-        # Use provided token
-        :
-    elif command -v auggie &> /dev/null; then
-        # Extract just the JSON token from auggie tokens print output
-        AUGMENT_TOKEN=$(auggie tokens print 2>/dev/null | grep -o '{.*}' | head -1 || true)
-    fi
+    # Agent credentials (using hook)
+    log "Transferring $HOOK_DISPLAY_NAME credentials..."
+    AGENT_TOKEN=$(hook_get_token)
 
-    if [ -n "$AUGMENT_TOKEN" ]; then
-        log "Transferring Augment credentials..."
-        gcloud compute ssh cloud-auggie --zone="$ZONE" --command="
-            mkdir -p ~/.augment
-            echo '$AUGMENT_TOKEN' > ~/.augment/session.json
-            chmod 600 ~/.augment/session.json
-            echo '✅ Augment credentials configured'
-        " 2>/dev/null
-        log "✅ Augment credentials transferred"
+    if [ -n "$AGENT_TOKEN" ]; then
+        hook_transfer_credentials "$ZONE" "$AGENT_TOKEN"
+        log "✅ $HOOK_DISPLAY_NAME credentials transferred"
     else
-        log "⚠️  No Augment token found. Run 'auggie login' locally first."
+        log "⚠️  No $HOOK_DISPLAY_NAME credentials found."
+        log "   $(hook_login_instructions)"
     fi
 fi
 
@@ -260,6 +306,8 @@ log ""
 log "Workspace contents:"
 gcloud compute ssh cloud-auggie --zone="$ZONE" --command="ls -la /workspace/" 2>/dev/null
 
+AGENT_CMD=$(hook_agent_command)
+
 log ""
 log "╔══════════════════════════════════════════════════════════════╗"
 log "║  🐕 CLOUD AUGGIE READY!                                      ║"
@@ -271,7 +319,7 @@ log ""
 log "Start working:"
 log "  cd /workspace/<repo-name>"
 log "  tmux new -s auggie"
-log "  auggie"
+log "  $AGENT_CMD"
 log ""
 log "Agent can commit and push:"
 log "  git checkout -b feature/my-changes"
