@@ -127,8 +127,8 @@ get_vm_name() {
         # Can't auto-derive, use a default pattern
         vm_name="${USER}-cloud-agent"
     fi
-    # Normalize VM name (GCP requires lowercase, no underscores)
-    echo "$vm_name" | tr '[:upper:]' '[:lower:]' | tr '_' '-'
+    # Normalize VM name (GCP requires lowercase, no dots or underscores)
+    echo "$vm_name" | tr '[:upper:]' '[:lower:]' | tr '_.' '-'
 }
 
 # VM management commands (don't need full initialization)
@@ -314,8 +314,8 @@ else
     VM_NAME="${FIRST_NAME}.${LAST_NAME}-cloud-agent"
 fi
 
-# Normalize VM name (GCP requires lowercase, no underscores)
-VM_NAME=$(echo "$VM_NAME" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+# Normalize VM name (GCP requires lowercase, no dots or underscores)
+VM_NAME=$(echo "$VM_NAME" | tr '[:upper:]' '[:lower:]' | tr '_.' '-')
 OWNER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
 
 log "VM name: $VM_NAME"
