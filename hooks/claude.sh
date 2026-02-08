@@ -37,22 +37,23 @@ hook_get_token() {
 }
 
 # Transfer credentials to the remote VM
-# Arguments: $1 = zone, $2 = token (settings file content)
+# Arguments: $1 = zone, $2 = token (settings file content), $3 = vm_name
 hook_transfer_credentials() {
     local zone="$1"
     local token="$2"
-    
+    local vm_name="$3"
+
     # Create a temp file to transfer (avoids shell escaping issues with large JSON)
     local temp_file=$(mktemp)
     echo "$token" > "$temp_file"
-    
-    gcloud compute scp "$temp_file" cloud-agent:~/.claude.json --zone="$zone" 2>/dev/null
-    gcloud compute ssh cloud-agent --zone="$zone" --command="
+
+    gcloud compute scp "$temp_file" "$vm_name":~/.claude.json --zone="$zone" 2>/dev/null
+    gcloud compute ssh "$vm_name" --zone="$zone" --command="
         chmod 600 ~/.claude.json
         mkdir -p ~/.claude
         echo '✅ Claude Code credentials configured'
     " 2>/dev/null
-    
+
     rm -f "$temp_file"
 }
 

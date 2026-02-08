@@ -74,12 +74,22 @@ To uninstall:
 
 ## Prerequisites
 
-- Google Cloud SDK (`gcloud`) installed and configured
-- Terraform installed
-- Your chosen agent CLI installed and logged in locally:
+- **Google Cloud SDK (`gcloud`)** installed, authenticated, and configured with a project:
+  ```bash
+  # Install: https://cloud.google.com/sdk/docs/install
+  gcloud auth login
+  gcloud config set project YOUR_PROJECT_ID
+  ```
+- **Terraform** installed:
+  ```bash
+  # macOS
+  brew install terraform
+  # Linux: https://developer.hashicorp.com/terraform/install
+  ```
+- Your chosen **agent CLI** installed and logged in locally:
   - **Auggie**: `npm install -g @augmentcode/auggie` then `auggie login`
   - **Claude Code**: `npm install -g @anthropic-ai/claude-code` then run `claude` to login
-- GitHub authentication (SSH key or PAT - see below)
+- **GitHub authentication** (SSH key or PAT - see below)
 
 ## Quick Start
 
@@ -132,13 +142,19 @@ Fine-grained PATs work for repos in your personal GitHub account.
 ### 4. SSH and Start Working
 
 ```bash
-gcloud compute ssh cloud-agent --zone=us-central1-a
+# Easy way (auto-attaches to tmux):
+ca --ssh
+
+# Or manually:
+gcloud compute ssh <your-vm-name> --zone=us-central1-a
 
 # On the VM:
 cd /workspace/yourrepo
 tmux new -s auggie
 auggie
 ```
+
+**Note:** VM name is `{username}-cloud-agent` (e.g., `john.doe-cloud-agent`)
 
 ### 5. Agent Can Push Changes
 
@@ -165,6 +181,8 @@ GITHUB_TOKEN_FILE=~/.github-cloud-agent-token ./deploy.sh --skip-vm https://gith
 Usage: ca [OPTIONS] [REPO_URL...]
        ./deploy.sh [OPTIONS] [REPO_URL...]
 
+If no REPO_URL is provided and you're in a git repo, uses the 'origin' remote.
+
 Arguments:
   REPO_URL    GitHub repo URL(s) to clone
               SSH:   git@github.com:org/repo.git
@@ -175,6 +193,14 @@ Options:
   --create-vm       Force VM creation even if it exists
   --skip-vm         Skip VM creation, only deploy repos
   --skip-creds      Skip credential transfer
+  --skip-deletion VALUE
+                    Set skip_deletion label (default: yes)
+                    Use "no" or "false" to allow automatic deletion
+  --list            List cloud-agent VMs and their status
+  --start           Start a stopped cloud-agent VM
+  --stop            Stop (but don't delete) the cloud-agent VM
+  --terminate       Terminate (delete) the cloud-agent VM
+  --ssh             SSH into the VM and attach to tmux session
   -h, --help        Show help
 
 Environment Variables:
@@ -185,6 +211,18 @@ Environment Variables:
   ZONE              GCP zone (default: us-central1-a)
   MACHINE_TYPE      VM machine type (default: n2-standard-4)
   CLUSTER_NAME      Optional GKE cluster name
+  SKIP_DELETION     Set skip_deletion label (default: yes)
+```
+
+### VM Management
+
+```bash
+ca                  # Deploy current repo (auto-detects origin)
+ca --list           # List all cloud-agent VMs
+ca --ssh            # SSH and attach to tmux session
+ca --stop           # Stop VM (preserves data)
+ca --start          # Start a stopped VM
+ca --terminate      # Delete VM (with confirmation)
 ```
 
 ## Tmux Cheat Sheet
@@ -212,13 +250,20 @@ tmux ls                 # List sessions
 ## Cleanup
 
 ```bash
-terraform destroy -auto-approve
+# Terminate (delete) the VM
+ca --terminate
+
+# Or stop it to save costs but keep data
+ca --stop
+
+# Or use terraform directly
+cd ~/.cloud-agent && terraform destroy -auto-approve
 ```
 
 ## Cost
 
 - **VM cost:** ~$0.19/hour (n2-standard-4)
-- **Recommendation:** Destroy when not actively using
+- **Recommendation:** Use `ca --stop` when not actively using, `ca --terminate` when done
 
 ---
 

@@ -39,6 +39,7 @@ usage() {
 Usage: $0 [OPTIONS] [REPO_URL...]
 
 Deploy repos to Cloud Agent VM. Creates VM if it doesn't exist.
+If no REPO_URL is provided and you're in a git repo, uses the 'origin' remote.
 
 Arguments:
   REPO_URL    GitHub repo URL(s) to clone
@@ -51,6 +52,14 @@ Options:
   --create-vm       Force VM creation even if it exists
   --skip-vm         Skip VM creation, only deploy repos (VM must exist)
   --skip-creds      Skip credential transfer
+  --skip-deletion VALUE
+                    Set skip_deletion label (default: yes)
+                    Use "no" or "false" to allow automatic deletion
+  --list            List cloud-agent VMs and their status
+  --start           Start a stopped cloud-agent VM
+  --stop            Stop (but don't delete) the cloud-agent VM
+  --terminate       Terminate (delete) the cloud-agent VM
+  --ssh             SSH into the VM and attach to tmux session
   -h, --help        Show this help message
 
 Environment Variables:
@@ -62,8 +71,12 @@ Environment Variables:
   ZONE              GCP zone (default: us-central1-a)
   MACHINE_TYPE      VM machine type (default: n2-standard-4)
   CLUSTER_NAME      Optional GKE cluster name for kubectl config
+  SKIP_DELETION     Set skip_deletion label (default: yes)
 
 Examples:
+  # Deploy current repo (auto-detects origin remote)
+  $0
+
   # Deploy with Auggie (default)
   SSH_KEY=~/.ssh/cloud-agent $0 git@github.com:org/repo.git
 
@@ -83,8 +96,74 @@ Examples:
 
   # Deploy multiple repos
   SSH_KEY=~/.ssh/cloud-agent $0 git@github.com:org/repo1.git git@github.com:org/repo2.git
+
+  # VM management
+  $0 --list           # List VMs
+  $0 --ssh            # SSH and attach to tmux
+  $0 --stop           # Stop VM
+  $0 --start          # Start VM
+  $0 --terminate      # Delete VM
 EOF
     exit 0
+}
+
+# Get VM name based on $USER
+get_vm_name() {
+    local vm_name
+    if [[ "$USER" == *.* ]]; then
+        vm_name="${USER}-cloud-agent"
+    else
+        # Can't auto-derive, use a default pattern
+        vm_name="${USER}-cloud-agent"
+    fi
+    # Normalize VM name (GCP requires lowercase, no underscores)
+    echo "$vm_name" | tr '[:upper:]' '[:lower:]' | tr '_' '-'
+}
+
+# VM management commands (don't need full initialization)
+handle_vm_command() {
+    local cmd="$1"
+    local zone="${ZONE:-us-central1-a}"
+    local vm_name=$(get_vm_name)
+
+    case "$cmd" in
+        list)
+            log "Listing cloud-agent VMs..."
+            gcloud compute instances list \
+                --filter="labels.purpose=cloud-agent" \
+                --format="table(name,zone,status,labels.owner,labels.skip_deletion,networkInterfaces[0].accessConfigs[0].natIP:label=EXTERNAL_IP)"
+            exit 0
+            ;;
+        start)
+            log "Starting VM: $vm_name..."
+            gcloud compute instances start "$vm_name" --zone="$zone"
+            log "✅ VM started"
+            exit 0
+            ;;
+        stop)
+            log "Stopping VM: $vm_name..."
+            gcloud compute instances stop "$vm_name" --zone="$zone"
+            log "✅ VM stopped"
+            exit 0
+            ;;
+        terminate)
+            log "⚠️  Terminating VM: $vm_name..."
+            read -p "Are you sure? [y/N] " confirm
+            if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                gcloud compute instances delete "$vm_name" --zone="$zone" --quiet
+                log "✅ VM terminated"
+            else
+                log "Cancelled"
+            fi
+            exit 0
+            ;;
+        ssh)
+            log "Connecting to $vm_name and attaching to tmux..."
+            # Try to attach to existing session, or create new one
+            gcloud compute ssh "$vm_name" --zone="$zone" -- -t "tmux attach-session 2>/dev/null || tmux new-session"
+            exit 0
+            ;;
+    esac
 }
 
 # Parse arguments
@@ -92,6 +171,8 @@ CREATE_VM="auto"
 SKIP_CREDS=false
 REPOS=()
 AGENT="${AGENT:-auggie}"  # Default to auggie
+SKIP_DELETION="${SKIP_DELETION:-yes}"  # Default to yes
+VM_COMMAND=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -111,6 +192,29 @@ while [[ $# -gt 0 ]]; do
             SKIP_CREDS=true
             shift
             ;;
+        --skip-deletion)
+            SKIP_DELETION="$2"
+            # Normalize "false" to "no"
+            if [ "$SKIP_DELETION" = "false" ]; then
+                SKIP_DELETION="no"
+            fi
+            shift 2
+            ;;
+        --list)
+            handle_vm_command "list"
+            ;;
+        --start)
+            handle_vm_command "start"
+            ;;
+        --stop)
+            handle_vm_command "stop"
+            ;;
+        --terminate)
+            handle_vm_command "terminate"
+            ;;
+        --ssh)
+            handle_vm_command "ssh"
+            ;;
         -h|--help)
             usage
             ;;
@@ -124,6 +228,17 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# If no repos specified, try to detect from current git directory
+if [ ${#REPOS[@]} -eq 0 ]; then
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        ORIGIN_URL=$(git remote get-url origin 2>/dev/null || true)
+        if [ -n "$ORIGIN_URL" ]; then
+            log "Auto-detected repo from current directory: $ORIGIN_URL"
+            REPOS+=("$ORIGIN_URL")
+        fi
+    fi
+fi
 
 # Load the agent hook
 load_agent_hook "$AGENT"
@@ -163,13 +278,54 @@ CLUSTER_ZONE="${CLUSTER_ZONE:-$ZONE}"
 MACHINE_TYPE="${MACHINE_TYPE:-n2-standard-4}"
 CLUSTER_NAME="${CLUSTER_NAME:-}"
 
+# Derive VM name and owner from $USER
+# Expected format: firstname.lastname
+if [[ "$USER" == *.* ]]; then
+    # User has firstname.lastname format
+    OWNER=$(echo "$USER" | tr '.' '_')
+    VM_NAME="${USER}-cloud-agent"
+else
+    # Prompt for first and last name
+    log "⚠️  Cannot determine owner from \$USER ($USER)"
+    log "   Expected format: firstname.lastname"
+    read -p "Enter your first name: " FIRST_NAME
+    read -p "Enter your last name: " LAST_NAME
+    if [ -z "$FIRST_NAME" ] || [ -z "$LAST_NAME" ]; then
+        log "❌ ERROR: First and last name are required"
+        exit 1
+    fi
+    OWNER="${FIRST_NAME}_${LAST_NAME}"
+    VM_NAME="${FIRST_NAME}.${LAST_NAME}-cloud-agent"
+fi
+
+# Normalize VM name (GCP requires lowercase, no underscores)
+VM_NAME=$(echo "$VM_NAME" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+OWNER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+
+log "VM name: $VM_NAME"
+log "Owner: $OWNER"
+log "Skip deletion: $SKIP_DELETION"
+
 # Load GitHub token
 if [ -n "$GITHUB_TOKEN_FILE" ] && [ -f "$GITHUB_TOKEN_FILE" ]; then
     GITHUB_TOKEN=$(cat "$GITHUB_TOKEN_FILE")
 fi
 
-# Check if VM exists
-VM_EXISTS=$(gcloud compute instances list --filter="name=cloud-agent" --format="value(name)" 2>/dev/null || true)
+# Check if VM exists (fast check via terraform state first, then fallback to gcloud)
+VM_EXISTS=""
+if [ -f "$SCRIPT_DIR/terraform.tfstate" ]; then
+    # Check terraform state for existing VM with matching name
+    TF_VM_NAME=$(cd "$SCRIPT_DIR" && terraform output -raw vm_name 2>/dev/null || true)
+    if [ "$TF_VM_NAME" = "$VM_NAME" ]; then
+        VM_EXISTS="$VM_NAME"
+        log "✓ Found VM in terraform state: $VM_NAME"
+    fi
+fi
+
+# If not in terraform state, check gcloud (slower but catches VMs created outside terraform)
+if [ -z "$VM_EXISTS" ]; then
+    VM_EXISTS=$(gcloud compute instances list --filter="name=$VM_NAME" --format="value(name)" 2>/dev/null || true)
+fi
 
 if [ "$CREATE_VM" = "auto" ]; then
     if [ -n "$VM_EXISTS" ]; then
@@ -189,12 +345,15 @@ if [ "$CREATE_VM" = "yes" ]; then
     log ""
     log "Creating terraform.tfvars..."
     cat > "$SCRIPT_DIR/terraform.tfvars" << EOF
-project_id   = "$PROJECT_ID"
-region       = "$REGION"
-zone         = "$ZONE"
-machine_type = "$MACHINE_TYPE"
-cluster_name = "${CLUSTER_NAME:-}"
-cluster_zone = "$CLUSTER_ZONE"
+project_id    = "$PROJECT_ID"
+region        = "$REGION"
+zone          = "$ZONE"
+machine_type  = "$MACHINE_TYPE"
+cluster_name  = "${CLUSTER_NAME:-}"
+cluster_zone  = "$CLUSTER_ZONE"
+vm_name       = "$VM_NAME"
+owner         = "$OWNER"
+skip_deletion = "$SKIP_DELETION"
 EOF
 
     log ""
@@ -203,12 +362,13 @@ EOF
     terraform init -input=false
 
     log ""
-    log "Applying Terraform (creating cloud-agent VM)..."
+    log "Applying Terraform (creating $VM_NAME VM)..."
     terraform apply -auto-approve
 
     VM_IP=$(terraform output -raw cloud_agent_ip)
     log ""
     log "✅ Cloud Agent VM created!"
+    log "   Name: $VM_NAME"
     log "   External IP: $VM_IP"
 
     log ""
@@ -225,11 +385,11 @@ if [ "$SKIP_CREDS" = false ]; then
     if [ -n "$SSH_KEY" ]; then
         if [ -f "$SSH_KEY" ]; then
             log "Transferring SSH key..."
-            gcloud compute scp "$SSH_KEY" cloud-agent:~/.ssh/id_ed25519 --zone="$ZONE" 2>/dev/null
+            gcloud compute scp "$SSH_KEY" "$VM_NAME":~/.ssh/id_ed25519 --zone="$ZONE" 2>/dev/null
             if [ -f "${SSH_KEY}.pub" ]; then
-                gcloud compute scp "${SSH_KEY}.pub" cloud-agent:~/.ssh/id_ed25519.pub --zone="$ZONE" 2>/dev/null
+                gcloud compute scp "${SSH_KEY}.pub" "$VM_NAME":~/.ssh/id_ed25519.pub --zone="$ZONE" 2>/dev/null
             fi
-            gcloud compute ssh cloud-agent --zone="$ZONE" --command="
+            gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
                 chmod 600 ~/.ssh/id_ed25519
                 chmod 644 ~/.ssh/id_ed25519.pub 2>/dev/null || true
                 # Add GitHub to known_hosts to avoid prompt
@@ -246,7 +406,7 @@ if [ "$SKIP_CREDS" = false ]; then
     # GitHub PAT (for personal repos / non-enterprise)
     elif [ -n "$GITHUB_TOKEN" ]; then
         log "Transferring GitHub credentials (PAT)..."
-        gcloud compute ssh cloud-agent --zone="$ZONE" --command="
+        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
             git config --global credential.helper store
             echo 'https://oauth2:$GITHUB_TOKEN@github.com' > ~/.git-credentials
             chmod 600 ~/.git-credentials
@@ -266,7 +426,7 @@ if [ "$SKIP_CREDS" = false ]; then
     AGENT_TOKEN=$(hook_get_token)
 
     if [ -n "$AGENT_TOKEN" ]; then
-        hook_transfer_credentials "$ZONE" "$AGENT_TOKEN"
+        hook_transfer_credentials "$ZONE" "$AGENT_TOKEN" "$VM_NAME"
         log "✅ $HOOK_DISPLAY_NAME credentials transferred"
     else
         log "⚠️  No $HOOK_DISPLAY_NAME credentials found."
@@ -283,7 +443,7 @@ if [ ${#REPOS[@]} -gt 0 ]; then
         repo_name=$(basename "$repo" .git)
         log "  Cloning $repo_name..."
 
-        gcloud compute ssh cloud-agent --zone="$ZONE" --command="
+        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
             cd /workspace
             if [ -d '$repo_name' ]; then
                 echo '  ⚠️  $repo_name already exists, pulling latest...'
@@ -304,7 +464,7 @@ fi
 # List workspace contents
 log ""
 log "Workspace contents:"
-gcloud compute ssh cloud-agent --zone="$ZONE" --command="ls -la /workspace/" 2>/dev/null
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="ls -la /workspace/" 2>/dev/null
 
 AGENT_CMD=$(hook_agent_command)
 
@@ -313,12 +473,14 @@ log "╔════════════════════════
 log "║  🐕 CLOUD AGENT READY!                                      ║"
 log "╚══════════════════════════════════════════════════════════════╝"
 log ""
-log "SSH into cloud-agent:"
-log "  gcloud compute ssh cloud-agent --zone=$ZONE"
+log "Connect to VM (with tmux):"
+log "  ca --ssh"
+log ""
+log "Or manually SSH:"
+log "  gcloud compute ssh $VM_NAME --zone=$ZONE"
 log ""
 log "Start working:"
 log "  cd /workspace/<repo-name>"
-log "  tmux new -s auggie"
 log "  $AGENT_CMD"
 log ""
 log "Agent can commit and push:"
@@ -326,8 +488,11 @@ log "  git checkout -b feature/my-changes"
 log "  git add . && git commit -m 'Changes from cloud-agent'"
 log "  git push -u origin feature/my-changes"
 log ""
-log "To destroy cloud-agent when done:"
-log "  cd $SCRIPT_DIR && terraform destroy -auto-approve"
+log "VM management:"
+log "  ca --list       # List VMs"
+log "  ca --stop       # Stop VM"
+log "  ca --start      # Start VM"
+log "  ca --terminate  # Delete VM"
 log ""
 log "🐕 GOOD LUCK!"
 

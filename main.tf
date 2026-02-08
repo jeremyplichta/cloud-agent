@@ -48,7 +48,7 @@ resource "google_project_iam_member" "cloud_agent_iam_admin" {
 
 # Cloud Agent VM instance
 resource "google_compute_instance" "cloud_agent" {
-  name         = "cloud-agent"
+  name         = var.vm_name
   machine_type = var.machine_type
   zone         = var.zone
 
@@ -81,7 +81,9 @@ resource "google_compute_instance" "cloud_agent" {
   tags = ["cloud-agent"]
 
   labels = {
-    purpose = "cloud-agent"
+    purpose       = "cloud-agent"
+    owner         = var.owner
+    skip_deletion = var.skip_deletion
   }
 }
 
@@ -110,8 +112,13 @@ output "cloud_agent_internal_ip" {
 }
 
 output "ssh_command" {
-  value       = "gcloud compute ssh cloud-agent --zone=${var.zone}"
+  value       = "gcloud compute ssh ${var.vm_name} --zone=${var.zone}"
   description = "Command to SSH into cloud-agent VM"
+}
+
+output "vm_name" {
+  value       = var.vm_name
+  description = "Name of the cloud-agent VM"
 }
 
 output "service_account_email" {

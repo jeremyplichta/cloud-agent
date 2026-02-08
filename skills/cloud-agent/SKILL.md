@@ -58,7 +58,30 @@ ls ~/.cloud-agent/hooks/
 
 Verify your agent's hook file exists (e.g., `auggie.sh` or `claude.sh`). If not, the agent is not supported.
 
-### 4. Check Terraform is installed
+### 4. Check gcloud CLI is installed and configured
+
+```bash
+which gcloud && gcloud version
+```
+
+If gcloud is NOT found, install it:
+- See https://cloud.google.com/sdk/docs/install
+
+Check authentication and project:
+```bash
+gcloud auth list
+gcloud config get-value project
+```
+
+If not authenticated or no project set:
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+**Note:** The GCP project ID, zone, and other settings are auto-detected from your gcloud configuration.
+
+### 5. Check Terraform is installed
 
 ```bash
 which terraform && terraform version
@@ -67,17 +90,6 @@ which terraform && terraform version
 If Terraform is NOT found, install it:
 - **macOS**: `brew install terraform`
 - **Linux**: See https://developer.hashicorp.com/terraform/install
-
-### 5. Check GCP credentials
-
-```bash
-gcloud auth list
-```
-
-If not authenticated, run:
-```bash
-gcloud auth login
-```
 
 ### 6. Check SSH key for GitHub
 
@@ -146,7 +158,7 @@ ZONE=us-central1-a MACHINE_TYPE=n1-standard-4 ca --agent <your-agent> git@github
 **Replace `<your-agent>` with your agent hook name: `auggie` or `claude`**
 
 The deployment will:
-- Create a GCP VM named `cloud-agent`
+- Create a GCP VM named `{username}-cloud-agent` (e.g., `john.doe-cloud-agent`)
 - Transfer SSH keys and your agent's credentials
 - Clone the repository at the current branch
 - Install your agent CLI on the VM
@@ -156,8 +168,11 @@ The deployment will:
 After deployment, give the user these commands to reconnect:
 
 ```bash
-# SSH to the instance
-gcloud compute ssh cloud-agent --zone=us-central1-a
+# Easy way (auto-attaches to tmux):
+ca --ssh
+
+# Or manually:
+gcloud compute ssh <vm-name> --zone=us-central1-a
 
 # Once connected, attach to the tmux session
 cd /workspace/<repo-name>
@@ -169,8 +184,22 @@ tmux attach -t auggie
 When the user is finished with the cloud instance:
 
 ```bash
-# Destroy the VM and cleanup
-ca --destroy
+# Terminate (delete) the VM
+ca --terminate
+
+# Or stop it to save costs but keep data
+ca --stop
+```
+
+## VM Management Commands
+
+```bash
+ca                  # Deploy current repo (auto-detects origin)
+ca --list           # List all cloud-agent VMs
+ca --ssh            # SSH and attach to tmux session
+ca --stop           # Stop VM (preserves data)
+ca --start          # Start a stopped VM
+ca --terminate      # Delete VM (with confirmation)
 ```
 
 ## Example Conversation Flow
@@ -182,9 +211,9 @@ ca --destroy
 2. Commit current changes with descriptive message
 3. Create/switch to a feature branch if on main
 4. Push to remote
-5. Run: `ca --agent claude git@github.com:org/repo.git`
-6. Provide reconnection instructions
-7. Remind user to run `ca --destroy` when done
+5. Run: `ca --agent claude git@github.com:org/repo.git` (or just `ca --agent claude` if in the repo)
+6. Provide reconnection instructions: `ca --ssh`
+7. Remind user to run `ca --terminate` when done (or `ca --stop` to pause)
 
 ## Environment Variables
 
@@ -195,10 +224,13 @@ ca --destroy
 | `ZONE` | GCP zone for the VM | `us-central1-a` |
 | `MACHINE_TYPE` | GCP machine type | `n2-standard-4` |
 | `GITHUB_TOKEN` | GitHub PAT (or use `GITHUB_TOKEN_FILE`) | - |
+| `SKIP_DELETION` | Set skip_deletion label | `yes` |
 
 ## Notes
 
 - **You MUST use the correct `--agent` flag for your agent type**
+- **VM name** is `{username}-cloud-agent` based on the local `$USER` environment variable
+- **Owner label** is auto-derived from `$USER` (expected format: `firstname.lastname`)
 - The cloud VM clones the repo at the **current branch** you pushed
 - Work done on the VM needs to be committed and pushed back
 - The tmux session is named `auggie` - use `tmux attach -t auggie` to reconnect

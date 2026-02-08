@@ -32,12 +32,13 @@ hook_get_token() {
 }
 
 # Transfer credentials to the remote VM
-# Arguments: $1 = zone, $2 = token
+# Arguments: $1 = zone, $2 = token, $3 = vm_name
 hook_transfer_credentials() {
     local zone="$1"
     local token="$2"
-    
-    gcloud compute ssh cloud-agent --zone="$zone" --command="
+    local vm_name="$3"
+
+    gcloud compute ssh "$vm_name" --zone="$zone" --command="
         mkdir -p ~/.augment
         echo '$token' > ~/.augment/session.json
         chmod 600 ~/.augment/session.json

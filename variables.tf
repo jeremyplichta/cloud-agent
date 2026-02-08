@@ -21,6 +21,22 @@ variable "machine_type" {
   default     = "n2-standard-4"
 }
 
+variable "vm_name" {
+  description = "Name of the cloud-agent VM (typically {user}-cloud-agent)"
+  type        = string
+}
+
+variable "owner" {
+  description = "Owner of the VM in firstname_lastname format"
+  type        = string
+}
+
+variable "skip_deletion" {
+  description = "Whether to skip automatic deletion of the VM (yes/no)"
+  type        = string
+  default     = "yes"
+}
+
 variable "cluster_name" {
   description = "Name of the GKE cluster to configure kubectl for (optional)"
   type        = string
