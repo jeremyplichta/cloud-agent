@@ -420,8 +420,12 @@ if [ "$SKIP_CREDS" = false ]; then
     log "Configuring credentials on VM..."
 
     # Auto-detect SSH key if not explicitly set
+    # Priority: cloud-auggie > cloud-agent > id_ed25519 > id_rsa
     if [ -z "$SSH_KEY" ]; then
-        if [ -f "$HOME/.ssh/cloud-agent" ]; then
+        if [ -f "$HOME/.ssh/cloud-auggie" ]; then
+            SSH_KEY="$HOME/.ssh/cloud-auggie"
+            log "Auto-detected SSH key: $SSH_KEY"
+        elif [ -f "$HOME/.ssh/cloud-agent" ]; then
             SSH_KEY="$HOME/.ssh/cloud-agent"
             log "Auto-detected SSH key: $SSH_KEY"
         elif [ -f "$HOME/.ssh/id_ed25519" ]; then
