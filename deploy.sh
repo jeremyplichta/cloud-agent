@@ -412,6 +412,20 @@ if [ "$SKIP_CREDS" = false ]; then
     log ""
     log "Configuring credentials on VM..."
 
+    # Auto-detect SSH key if not explicitly set
+    if [ -z "$SSH_KEY" ]; then
+        if [ -f "$HOME/.ssh/cloud-agent" ]; then
+            SSH_KEY="$HOME/.ssh/cloud-agent"
+            log "Auto-detected SSH key: $SSH_KEY"
+        elif [ -f "$HOME/.ssh/id_ed25519" ]; then
+            SSH_KEY="$HOME/.ssh/id_ed25519"
+            log "Auto-detected SSH key: $SSH_KEY"
+        elif [ -f "$HOME/.ssh/id_rsa" ]; then
+            SSH_KEY="$HOME/.ssh/id_rsa"
+            log "Auto-detected SSH key: $SSH_KEY"
+        fi
+    fi
+
     # SSH key (recommended for enterprise orgs)
     if [ -n "$SSH_KEY" ]; then
         if [ -f "$SSH_KEY" ]; then
@@ -423,6 +437,12 @@ if [ "$SKIP_CREDS" = false ]; then
             gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
                 chmod 600 ~/.ssh/id_ed25519
                 chmod 644 ~/.ssh/id_ed25519.pub 2>/dev/null || true
+                # Add public key to authorized_keys for direct SSH access
+                if [ -f ~/.ssh/id_ed25519.pub ]; then
+                    cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+                    chmod 600 ~/.ssh/authorized_keys
+                    echo '✅ Public key added to authorized_keys'
+                fi
                 # Add GitHub to known_hosts to avoid prompt
                 ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
                 git config --global user.email 'cloud-agent@localhost'
@@ -447,9 +467,10 @@ if [ "$SKIP_CREDS" = false ]; then
         " 2>/dev/null
         log "✅ GitHub PAT transferred"
     else
-        log "⚠️  No SSH_KEY or GITHUB_TOKEN set."
+        log "⚠️  No SSH key found and no GITHUB_TOKEN set."
         log "   For enterprise: SSH_KEY=~/.ssh/cloud-agent ./deploy.sh git@github.com:org/repo.git"
         log "   For personal:   GITHUB_TOKEN=xxx ./deploy.sh https://github.com/user/repo.git"
+        log "   Or create a key: ssh-keygen -t ed25519 -f ~/.ssh/cloud-agent -N ''"
     fi
 
     # Agent credentials (using hook)
