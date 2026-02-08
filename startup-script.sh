@@ -60,9 +60,10 @@ else
     log "No GKE cluster specified, skipping kubectl configuration"
 fi
 
-# Create workspace directory
+# Create workspace directory (world-writable so any user can clone repos)
 log "Creating workspace directory..."
 mkdir -p /workspace
+chmod 777 /workspace
 cd /workspace
 
 # Prepare workspace README

@@ -437,10 +437,23 @@ if [ "$SKIP_CREDS" = false ]; then
     if [ -n "$SSH_KEY" ]; then
         if [ -f "$SSH_KEY" ]; then
             log "Transferring SSH key..."
-            gcloud compute scp "$SSH_KEY" "$VM_NAME":~/.ssh/id_ed25519 --zone="$ZONE" 2>/dev/null
-            if [ -f "${SSH_KEY}.pub" ]; then
-                gcloud compute scp "${SSH_KEY}.pub" "$VM_NAME":~/.ssh/id_ed25519.pub --zone="$ZONE" 2>/dev/null
+            # First, create ~/.ssh directory on the VM
+            gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="mkdir -p ~/.ssh && chmod 700 ~/.ssh" 2>/dev/null
+
+            # Transfer the private key
+            if ! gcloud compute scp "$SSH_KEY" "$VM_NAME":~/.ssh/id_ed25519 --zone="$ZONE"; then
+                log "❌ Failed to transfer SSH private key"
+                exit 1
             fi
+
+            # Transfer the public key if it exists
+            if [ -f "${SSH_KEY}.pub" ]; then
+                if ! gcloud compute scp "${SSH_KEY}.pub" "$VM_NAME":~/.ssh/id_ed25519.pub --zone="$ZONE"; then
+                    log "⚠️  Failed to transfer SSH public key"
+                fi
+            fi
+
+            # Configure SSH on the VM
             gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
                 chmod 600 ~/.ssh/id_ed25519
                 chmod 644 ~/.ssh/id_ed25519.pub 2>/dev/null || true
@@ -455,7 +468,7 @@ if [ "$SKIP_CREDS" = false ]; then
                 git config --global user.email 'cloud-agent@localhost'
                 git config --global user.name 'Cloud Agent'
                 echo '✅ SSH key configured'
-            " 2>/dev/null
+            "
             log "✅ SSH key transferred"
         else
             log "❌ SSH key not found: $SSH_KEY"
@@ -498,6 +511,9 @@ if [ ${#REPOS[@]} -gt 0 ]; then
     log ""
     log "Cloning repositories to VM..."
 
+    # Ensure /workspace is writable (in case startup script hasn't run or VM was created before this fix)
+    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod 777 /workspace 2>/dev/null || true" 2>/dev/null
+
     for repo in "${REPOS[@]}"; do
         repo_name=$(basename "$repo" .git)
         log "  Cloning $repo_name..."
@@ -511,7 +527,7 @@ if [ ${#REPOS[@]} -gt 0 ]; then
                 git clone '$repo' '$repo_name'
                 echo '  ✅ Cloned $repo_name'
             fi
-        " 2>/dev/null
+        "
     done
 
     log "✅ All repositories cloned"
