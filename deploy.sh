@@ -158,11 +158,18 @@ handle_vm_command() {
             exit 0
             ;;
         terminate)
-            log "⚠️  Terminating VM: $vm_name..."
+            log "⚠️  Terminating VM and cleaning up resources..."
             read -p "Are you sure? [y/N] " confirm
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                gcloud compute instances delete "$vm_name" --zone="$zone" --quiet
-                log "✅ VM terminated"
+                cd "$SCRIPT_DIR"
+                if [ -f "terraform.tfstate" ]; then
+                    terraform destroy -auto-approve
+                    log "✅ All resources destroyed"
+                else
+                    log "No terraform state found, using gcloud to delete VM..."
+                    gcloud compute instances delete "$vm_name" --zone="$zone" --quiet
+                    log "✅ VM terminated"
+                fi
             else
                 log "Cancelled"
             fi
