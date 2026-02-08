@@ -55,6 +55,12 @@ Options:
   --skip-deletion VALUE
                     Set skip_deletion label (default: yes)
                     Use "no" or "false" to allow automatic deletion
+  --permissions LIST
+                    Comma-separated permissions for VM service account
+                    By default, VM has no service account (no GCP API access)
+                    Options: admin, compute, gke, storage, network, bigquery,
+                             bq, iam, logging, pubsub, sql, secrets, dns, run, functions
+                    Example: --permissions compute,gke,storage
   --list            List cloud-agent VMs and their status
   --start           Start a stopped cloud-agent VM
   --stop            Stop (but don't delete) the cloud-agent VM
@@ -72,6 +78,7 @@ Environment Variables:
   MACHINE_TYPE      VM machine type (default: n2-standard-4)
   CLUSTER_NAME      Optional GKE cluster name for kubectl config
   SKIP_DELETION     Set skip_deletion label (default: yes)
+  PERMISSIONS       Comma-separated permissions for VM service account
 
 Examples:
   # Deploy current repo (auto-detects origin remote)
@@ -103,6 +110,10 @@ Examples:
   $0 --stop           # Stop VM
   $0 --start          # Start VM
   $0 --terminate      # Delete VM
+
+  # With GCP permissions (creates a service account)
+  $0 --permissions admin git@github.com:org/repo.git          # Full admin
+  $0 --permissions compute,gke,storage git@github.com:org/repo.git  # Specific permissions
 EOF
     exit 0
 }
@@ -172,6 +183,7 @@ SKIP_CREDS=false
 REPOS=()
 AGENT="${AGENT:-auggie}"  # Default to auggie
 SKIP_DELETION="${SKIP_DELETION:-yes}"  # Default to yes
+PERMISSIONS="${PERMISSIONS:-}"  # Default to empty (no service account)
 VM_COMMAND=""
 
 while [[ $# -gt 0 ]]; do
@@ -198,6 +210,10 @@ while [[ $# -gt 0 ]]; do
             if [ "$SKIP_DELETION" = "false" ]; then
                 SKIP_DELETION="no"
             fi
+            shift 2
+            ;;
+        --permissions)
+            PERMISSIONS="$2"
             shift 2
             ;;
         --list)
@@ -305,6 +321,11 @@ OWNER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
 log "VM name: $VM_NAME"
 log "Owner: $OWNER"
 log "Skip deletion: $SKIP_DELETION"
+if [ -n "$PERMISSIONS" ]; then
+    log "Permissions: $PERMISSIONS"
+else
+    log "Permissions: none (no service account)"
+fi
 
 # Load GitHub token
 if [ -n "$GITHUB_TOKEN_FILE" ] && [ -f "$GITHUB_TOKEN_FILE" ]; then
@@ -344,6 +365,15 @@ fi
 if [ "$CREATE_VM" = "yes" ]; then
     log ""
     log "Creating terraform.tfvars..."
+
+    # Convert comma-separated permissions to Terraform list format
+    if [ -n "$PERMISSIONS" ]; then
+        # Convert "compute,gke,storage" to ["compute", "gke", "storage"]
+        PERMISSIONS_TF=$(echo "$PERMISSIONS" | sed 's/,/", "/g' | sed 's/^/["/' | sed 's/$/"]/')
+    else
+        PERMISSIONS_TF="[]"
+    fi
+
     cat > "$SCRIPT_DIR/terraform.tfvars" << EOF
 project_id    = "$PROJECT_ID"
 region        = "$REGION"
@@ -354,6 +384,7 @@ cluster_zone  = "$CLUSTER_ZONE"
 vm_name       = "$VM_NAME"
 owner         = "$OWNER"
 skip_deletion = "$SKIP_DELETION"
+permissions   = $PERMISSIONS_TF
 EOF
 
     log ""

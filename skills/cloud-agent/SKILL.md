@@ -225,6 +225,35 @@ ca --terminate      # Delete VM (with confirmation)
 | `MACHINE_TYPE` | GCP machine type | `n2-standard-4` |
 | `GITHUB_TOKEN` | GitHub PAT (or use `GITHUB_TOKEN_FILE`) | - |
 | `SKIP_DELETION` | Set skip_deletion label | `yes` |
+| `PERMISSIONS` | Comma-separated VM permissions | none |
+
+## GCP Permissions
+
+By default, the VM has **no service account** and cannot access GCP APIs. Use `--permissions` to grant specific access:
+
+```bash
+# Full admin (compute, gke, storage, iam)
+ca --permissions admin git@github.com:org/repo.git
+
+# Specific permissions
+ca --permissions compute,gke,storage git@github.com:org/repo.git
+```
+
+**Available permissions:**
+- `admin` - Full admin (compute, gke, storage, iam)
+- `compute` - Compute Engine admin
+- `gke` - GKE/container admin
+- `storage` - Cloud Storage admin
+- `network` - Network admin
+- `bigquery` or `bq` - BigQuery admin
+- `iam` - Service account user
+- `logging` - Logging admin
+- `pubsub` - Pub/Sub admin
+- `sql` - Cloud SQL admin
+- `secrets` - Secret Manager admin
+- `dns` - Cloud DNS admin
+- `run` - Cloud Run admin
+- `functions` - Cloud Functions admin
 
 ## Notes
 

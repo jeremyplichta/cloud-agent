@@ -49,3 +49,9 @@ variable "cluster_zone" {
   default     = "us-central1-a"
 }
 
+variable "permissions" {
+  description = "List of permission shortcuts to grant to the VM's service account. Empty means no service account (default). Options: admin, compute, gke, storage, network, bigquery/bq, iam, logging, pubsub, sql, secrets, dns, run, functions"
+  type        = list(string)
+  default     = []
+}
+

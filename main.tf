@@ -14,36 +14,64 @@ provider "google" {
   zone    = var.zone
 }
 
-# Service account for cloud-agent VM with full permissions
+# Local variables for permission mapping
+locals {
+  # Map of permission shortcuts to GCP IAM roles
+  permission_roles = {
+    compute  = "roles/compute.admin"
+    gke      = "roles/container.admin"
+    storage  = "roles/storage.admin"
+    network  = "roles/compute.networkAdmin"
+    bigquery = "roles/bigquery.admin"
+    bq       = "roles/bigquery.admin"
+    iam      = "roles/iam.serviceAccountUser"
+    logging  = "roles/logging.admin"
+    pubsub   = "roles/pubsub.admin"
+    sql      = "roles/cloudsql.admin"
+    secrets  = "roles/secretmanager.admin"
+    dns      = "roles/dns.admin"
+    run      = "roles/run.admin"
+    functions = "roles/cloudfunctions.admin"
+  }
+
+  # Admin permission grants all common admin roles
+  admin_roles = [
+    "roles/compute.admin",
+    "roles/container.admin",
+    "roles/storage.admin",
+    "roles/iam.serviceAccountUser"
+  ]
+
+  # Determine if we need a service account (permissions is not empty)
+  has_permissions = length(var.permissions) > 0
+
+  # Calculate the actual roles to grant
+  # If "admin" is in the list, use admin_roles; otherwise map each permission to its role
+  is_admin = contains(var.permissions, "admin")
+
+  requested_roles = local.is_admin ? local.admin_roles : [
+    for perm in var.permissions : local.permission_roles[perm]
+    if contains(keys(local.permission_roles), perm)
+  ]
+
+  # Deduplicate roles (in case of aliases like bq/bigquery)
+  unique_roles = distinct(local.requested_roles)
+}
+
+# Service account for cloud-agent VM (only created when permissions are specified)
 resource "google_service_account" "cloud_agent" {
-  account_id   = "cloud-agent-sa"
-  display_name = "Cloud Agent Service Account"
-  description  = "Service account for cloud-agent VM to manage GCP resources"
+  count        = local.has_permissions ? 1 : 0
+  account_id   = "${var.vm_name}-sa"
+  display_name = "Cloud Agent Service Account (${var.vm_name})"
+  description  = "Service account for ${var.vm_name} VM to manage GCP resources"
 }
 
-# Grant necessary IAM roles
-resource "google_project_iam_member" "cloud_agent_compute_admin" {
-  project = var.project_id
-  role    = "roles/compute.admin"
-  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
-}
-
-resource "google_project_iam_member" "cloud_agent_container_admin" {
-  project = var.project_id
-  role    = "roles/container.admin"
-  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
-}
-
-resource "google_project_iam_member" "cloud_agent_storage_admin" {
-  project = var.project_id
-  role    = "roles/storage.admin"
-  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
-}
-
-resource "google_project_iam_member" "cloud_agent_iam_admin" {
-  project = var.project_id
-  role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${google_service_account.cloud_agent.email}"
+# Grant IAM roles based on permissions variable
+resource "google_project_iam_member" "cloud_agent_roles" {
+  for_each = local.has_permissions ? toset(local.unique_roles) : []
+  project  = var.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.cloud_agent[0].email}"
 }
 
 # Cloud Agent VM instance
@@ -67,9 +95,13 @@ resource "google_compute_instance" "cloud_agent" {
     }
   }
 
-  service_account {
-    email  = google_service_account.cloud_agent.email
-    scopes = ["cloud-platform"]
+  # Only attach service account when permissions are specified
+  dynamic "service_account" {
+    for_each = local.has_permissions ? [1] : []
+    content {
+      email  = google_service_account.cloud_agent[0].email
+      scopes = ["cloud-platform"]
+    }
   }
 
   metadata_startup_script = templatefile("${path.module}/startup-script.sh", {
@@ -122,7 +154,7 @@ output "vm_name" {
 }
 
 output "service_account_email" {
-  value       = google_service_account.cloud_agent.email
-  description = "Service account email for cloud-agent"
+  value       = local.has_permissions ? google_service_account.cloud_agent[0].email : null
+  description = "Service account email for cloud-agent (null if no permissions specified)"
 }
 

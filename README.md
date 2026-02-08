@@ -196,6 +196,11 @@ Options:
   --skip-deletion VALUE
                     Set skip_deletion label (default: yes)
                     Use "no" or "false" to allow automatic deletion
+  --permissions LIST
+                    Comma-separated permissions for VM service account
+                    By default, VM has no service account (no GCP API access)
+                    Options: admin, compute, gke, storage, network, bigquery,
+                             bq, iam, logging, pubsub, sql, secrets, dns, run, functions
   --list            List cloud-agent VMs and their status
   --start           Start a stopped cloud-agent VM
   --stop            Stop (but don't delete) the cloud-agent VM
@@ -212,6 +217,7 @@ Environment Variables:
   MACHINE_TYPE      VM machine type (default: n2-standard-4)
   CLUSTER_NAME      Optional GKE cluster name
   SKIP_DELETION     Set skip_deletion label (default: yes)
+  PERMISSIONS       Comma-separated VM permissions (default: none)
 ```
 
 ### VM Management
@@ -223,6 +229,10 @@ ca --ssh            # SSH and attach to tmux session
 ca --stop           # Stop VM (preserves data)
 ca --start          # Start a stopped VM
 ca --terminate      # Delete VM (with confirmation)
+
+# With GCP permissions (creates a service account)
+ca --permissions admin git@github.com:org/repo.git          # Full admin access
+ca --permissions compute,gke,storage git@github.com:org/repo.git  # Specific permissions
 ```
 
 ## Tmux Cheat Sheet
@@ -243,6 +253,7 @@ tmux ls                 # List sessions
 
 ## Security Notes
 
+- **VM Permissions:** By default, VMs have **no service account** and cannot access GCP APIs. Use `--permissions` only when needed.
 - **GitHub PAT:** Use fine-grained tokens scoped to specific repos only
 - **Agent Credentials:** Stored securely in agent-specific locations
 - **Credentials:** Never committed to git (see `.gitignore`)
