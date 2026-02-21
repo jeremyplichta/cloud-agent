@@ -66,6 +66,9 @@ Options:
   --stop            Stop (but don't delete) the cloud-agent VM
   --terminate       Terminate (delete) the cloud-agent VM
   --ssh             SSH into the VM and attach to tmux session
+  --scp SRC DST     Copy files to/from VM using 'vm:' prefix for remote paths
+                    Examples: ca --scp ./file.txt vm:/workspace/
+                              ca --scp vm:/workspace/file.txt ./
   -h, --help        Show this help message
 
 Environment Variables:
@@ -181,6 +184,25 @@ handle_vm_command() {
             gcloud compute ssh "$vm_name" --zone="$zone" -- -t "tmux attach-session 2>/dev/null || tmux new-session"
             exit 0
             ;;
+        scp)
+            local src="$2"
+            local dst="$3"
+            if [ -z "$src" ] || [ -z "$dst" ]; then
+                log "❌ Usage: ca --scp <src> <dst>"
+                log "   Use 'vm:' prefix for remote paths"
+                log "   Examples:"
+                log "     ca --scp ./local-file.txt vm:/workspace/  # Upload to VM"
+                log "     ca --scp vm:/workspace/file.txt ./        # Download from VM"
+                exit 1
+            fi
+            # Replace 'vm:' prefix with actual VM name
+            src="${src//vm:/$vm_name:}"
+            dst="${dst//vm:/$vm_name:}"
+            log "Copying files..."
+            gcloud compute scp --zone="$zone" --recurse "$src" "$dst"
+            log "✅ Copy complete"
+            exit 0
+            ;;
     esac
 }
 
@@ -237,6 +259,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --ssh)
             handle_vm_command "ssh"
+            ;;
+        --scp)
+            handle_vm_command "scp" "$2" "$3"
             ;;
         -h|--help)
             usage
