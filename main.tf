@@ -105,9 +105,11 @@ resource "google_compute_instance" "cloud_agent" {
   }
 
   metadata_startup_script = templatefile("${path.module}/startup-script.sh", {
-    project_id   = var.project_id
-    cluster_name = var.cluster_name
-    cluster_zone = var.cluster_zone
+    project_id     = var.project_id
+    cluster_name   = var.cluster_name
+    cluster_zone   = var.cluster_zone
+    ssh_username   = var.ssh_username
+    ssh_public_key = var.ssh_public_key
   })
 
   tags = ["cloud-agent"]
@@ -119,7 +121,7 @@ resource "google_compute_instance" "cloud_agent" {
   }
 }
 
-# Firewall rule to allow SSH
+# Firewall rule to allow SSH (restricted to allowed_ips)
 resource "google_compute_firewall" "cloud_agent_ssh" {
   name    = "cloud-agent-allow-ssh"
   network = "default"
@@ -129,7 +131,9 @@ resource "google_compute_firewall" "cloud_agent_ssh" {
     ports    = ["22"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  # Only allow connections from specified IPs (Terraform replaces all rules on each apply)
+  # allowed_ips is required - no fallback to 0.0.0.0/0 for security
+  source_ranges = var.allowed_ips
   target_tags   = ["cloud-agent"]
 }
 

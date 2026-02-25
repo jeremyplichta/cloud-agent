@@ -55,3 +55,25 @@ variable "permissions" {
   default     = []
 }
 
+variable "allowed_ips" {
+  description = "List of IP addresses allowed to connect to the VM via SSH. Each IP should be in CIDR notation (e.g., '1.2.3.4/32'). Terraform will replace any existing firewall rules with these. Required - cannot be empty."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.allowed_ips) > 0
+    error_message = "allowed_ips cannot be empty. At least one IP address must be specified for SSH access."
+  }
+}
+
+variable "ssh_username" {
+  description = "Username allowed to SSH into the VM. If set, SSH will be restricted to only allow this user."
+  type        = string
+  default     = ""
+}
+
+variable "ssh_public_key" {
+  description = "Public SSH key for the allowed user. If set along with ssh_username, only key-based auth from this user is allowed."
+  type        = string
+  default     = ""
+}
+

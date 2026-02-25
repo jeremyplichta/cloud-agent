@@ -61,6 +61,9 @@ Options:
                     Options: admin, compute, gke, storage, network, bigquery,
                              bq, iam, logging, pubsub, sql, secrets, dns, run, functions
                     Example: --permissions compute,gke,storage
+  --ip ADDRESS      Additional IP address to whitelist for SSH access
+                    By default, only your current public IP is allowed
+                    Use this to add another IP (e.g., for accessing from a different location)
   --list            List cloud-agent VMs and their status
   --start           Start a stopped cloud-agent VM
   --stop            Stop (but don't delete) the cloud-agent VM
@@ -82,6 +85,7 @@ Environment Variables:
   CLUSTER_NAME      Optional GKE cluster name for kubectl config
   SKIP_DELETION     Set skip_deletion label (default: yes)
   PERMISSIONS       Comma-separated permissions for VM service account
+  ADDITIONAL_IP     Additional IP to whitelist for SSH access (same as --ip)
 
 Examples:
   # Deploy current repo (auto-detects origin remote)
@@ -117,6 +121,9 @@ Examples:
   # With GCP permissions (creates a service account)
   $0 --permissions admin git@github.com:org/repo.git          # Full admin
   $0 --permissions compute,gke,storage git@github.com:org/repo.git  # Specific permissions
+
+  # Whitelist additional IP for SSH access
+  $0 --ip 192.168.1.100 git@github.com:org/repo.git  # Allow your IP + another IP
 EOF
     exit 0
 }
@@ -213,6 +220,7 @@ REPOS=()
 AGENT="${AGENT:-auggie}"  # Default to auggie
 SKIP_DELETION="${SKIP_DELETION:-yes}"  # Default to yes
 PERMISSIONS="${PERMISSIONS:-}"  # Default to empty (no service account)
+ADDITIONAL_IP="${ADDITIONAL_IP:-}"  # Additional IP to whitelist for SSH access
 VM_COMMAND=""
 
 while [[ $# -gt 0 ]]; do
@@ -243,6 +251,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --permissions)
             PERMISSIONS="$2"
+            shift 2
+            ;;
+        --ip)
+            ADDITIONAL_IP="$2"
             shift 2
             ;;
         --list)
@@ -406,17 +418,74 @@ if [ "$CREATE_VM" = "yes" ]; then
         PERMISSIONS_TF="[]"
     fi
 
+    # Get current public IP for firewall rules (required - no fallback to 0.0.0.0/0)
+    log "Detecting your public IP address..."
+    MY_PUBLIC_IP=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
+    if [ -z "$MY_PUBLIC_IP" ]; then
+        log "❌ ERROR: Could not detect your public IP address."
+        log "   This is required to secure the firewall rules."
+        log "   Please check your internet connection and try again."
+        exit 1
+    fi
+    log "✓ Your public IP: $MY_PUBLIC_IP"
+
+    # Build allowed_ips list (always in CIDR notation)
+    ALLOWED_IPS="${MY_PUBLIC_IP}/32"
+    if [ -n "$ADDITIONAL_IP" ]; then
+        # Add /32 if not already in CIDR notation
+        if [[ ! "$ADDITIONAL_IP" =~ / ]]; then
+            ADDITIONAL_IP="${ADDITIONAL_IP}/32"
+        fi
+        ALLOWED_IPS="${ALLOWED_IPS},${ADDITIONAL_IP}"
+        log "✓ Additional whitelisted IP: $ADDITIONAL_IP"
+    fi
+    # Convert to Terraform list format: ["1.2.3.4/32", "5.6.7.8/32"]
+    ALLOWED_IPS_TF=$(echo "$ALLOWED_IPS" | sed 's/,/", "/g' | sed 's/^/["/' | sed 's/$/"]/')
+    log "✓ Firewall will only allow SSH from: $ALLOWED_IPS"
+
+    # Detect SSH key for SSH hardening (prioritize cloud-auggie > cloud-agent > id_ed25519 > id_rsa)
+    SSH_KEY_FOR_VM=""
+    if [ -z "$SSH_KEY" ]; then
+        if [ -f "$HOME/.ssh/cloud-auggie" ]; then
+            SSH_KEY_FOR_VM="$HOME/.ssh/cloud-auggie"
+        elif [ -f "$HOME/.ssh/cloud-agent" ]; then
+            SSH_KEY_FOR_VM="$HOME/.ssh/cloud-agent"
+        elif [ -f "$HOME/.ssh/id_ed25519" ]; then
+            SSH_KEY_FOR_VM="$HOME/.ssh/id_ed25519"
+        elif [ -f "$HOME/.ssh/id_rsa" ]; then
+            SSH_KEY_FOR_VM="$HOME/.ssh/id_rsa"
+        fi
+    else
+        SSH_KEY_FOR_VM="$SSH_KEY"
+    fi
+
+    # Get SSH public key content and username for SSH hardening
+    SSH_USERNAME=""
+    SSH_PUBLIC_KEY=""
+    if [ -n "$SSH_KEY_FOR_VM" ] && [ -f "${SSH_KEY_FOR_VM}.pub" ]; then
+        SSH_PUBLIC_KEY=$(cat "${SSH_KEY_FOR_VM}.pub")
+        # Derive username from local $USER (cloud-agent style)
+        SSH_USERNAME=$(echo "$USER" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
+        log "✓ SSH will be secured for user: $SSH_USERNAME"
+        log "✓ Using public key from: ${SSH_KEY_FOR_VM}.pub"
+    else
+        log "⚠️  No SSH public key found. SSH will not be hardened to a specific user."
+    fi
+
     cat > "$SCRIPT_DIR/terraform.tfvars" << EOF
-project_id    = "$PROJECT_ID"
-region        = "$REGION"
-zone          = "$ZONE"
-machine_type  = "$MACHINE_TYPE"
-cluster_name  = "${CLUSTER_NAME:-}"
-cluster_zone  = "$CLUSTER_ZONE"
-vm_name       = "$VM_NAME"
-owner         = "$OWNER"
-skip_deletion = "$SKIP_DELETION"
-permissions   = $PERMISSIONS_TF
+project_id     = "$PROJECT_ID"
+region         = "$REGION"
+zone           = "$ZONE"
+machine_type   = "$MACHINE_TYPE"
+cluster_name   = "${CLUSTER_NAME:-}"
+cluster_zone   = "$CLUSTER_ZONE"
+vm_name        = "$VM_NAME"
+owner          = "$OWNER"
+skip_deletion  = "$SKIP_DELETION"
+permissions    = $PERMISSIONS_TF
+allowed_ips    = $ALLOWED_IPS_TF
+ssh_username   = "$SSH_USERNAME"
+ssh_public_key = "$SSH_PUBLIC_KEY"
 EOF
 
     log ""

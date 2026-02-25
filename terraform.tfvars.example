@@ -11,3 +11,11 @@ machine_type = "n2-standard-4"
 # cluster_name = "your-gke-cluster-name"
 # cluster_zone = "us-central1-a"
 
+# Optional: Firewall rules - list of IPs allowed to SSH (in CIDR notation)
+# By default when using deploy.sh, your current public IP is automatically added
+# allowed_ips = ["1.2.3.4/32", "5.6.7.8/32"]
+
+# Optional: SSH hardening - restrict SSH to a specific user with key-based auth
+# ssh_username   = "your-username"
+# ssh_public_key = "ssh-ed25519 AAAA... your-key"
+
