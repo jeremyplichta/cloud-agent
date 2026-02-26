@@ -14,6 +14,59 @@ provider "google" {
   zone    = var.zone
 }
 
+# =============================================================================
+# NETWORKING - Dedicated VPC per user for isolation
+# =============================================================================
+
+# VPC Network - dedicated to this user's cloud-agent
+resource "google_compute_network" "cloud_agent" {
+  name                    = "${var.vm_name}-network"
+  auto_create_subnetworks = false
+  description             = "Dedicated network for ${var.vm_name} cloud-agent VM"
+}
+
+# Subnet for the cloud-agent VM
+resource "google_compute_subnetwork" "cloud_agent" {
+  name          = "${var.vm_name}-subnet"
+  ip_cidr_range = "10.0.0.0/24"
+  region        = var.region
+  network       = google_compute_network.cloud_agent.id
+  description   = "Subnet for ${var.vm_name} cloud-agent VM"
+}
+
+# Firewall rule - Allow SSH from specified IPs only
+resource "google_compute_firewall" "cloud_agent_ssh" {
+  name    = "${var.vm_name}-allow-ssh"
+  network = google_compute_network.cloud_agent.id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  # Only allow connections from specified IPs
+  source_ranges = var.allowed_ips
+  description   = "Allow SSH access to ${var.vm_name} from whitelisted IPs"
+}
+
+# Firewall rule - Allow all egress (for package downloads, git, etc.)
+resource "google_compute_firewall" "cloud_agent_egress" {
+  name      = "${var.vm_name}-allow-egress"
+  network   = google_compute_network.cloud_agent.id
+  direction = "EGRESS"
+
+  allow {
+    protocol = "all"
+  }
+
+  destination_ranges = ["0.0.0.0/0"]
+  description        = "Allow all outbound traffic from ${var.vm_name}"
+}
+
+# =============================================================================
+# IAM - Service account and permissions (optional)
+# =============================================================================
+
 # Local variables for permission mapping
 locals {
   # Map of permission shortcuts to GCP IAM roles
@@ -74,7 +127,10 @@ resource "google_project_iam_member" "cloud_agent_roles" {
   member   = "serviceAccount:${google_service_account.cloud_agent[0].email}"
 }
 
-# Cloud Agent VM instance
+# =============================================================================
+# COMPUTE - Cloud Agent VM instance
+# =============================================================================
+
 resource "google_compute_instance" "cloud_agent" {
   name         = var.vm_name
   machine_type = var.machine_type
@@ -88,10 +144,12 @@ resource "google_compute_instance" "cloud_agent" {
     }
   }
 
+  # Use the dedicated VPC network and subnet
   network_interface {
-    network = "default"
+    network    = google_compute_network.cloud_agent.id
+    subnetwork = google_compute_subnetwork.cloud_agent.id
     access_config {
-      # Ephemeral external IP
+      # Ephemeral external IP for SSH access and outbound internet
     }
   }
 
@@ -112,29 +170,31 @@ resource "google_compute_instance" "cloud_agent" {
     ssh_public_key = var.ssh_public_key
   })
 
-  tags = ["cloud-agent"]
+  # SSH Security: Block all project-level and OS Login SSH access
+  # Only allow the explicitly configured SSH key for the specified user
+  metadata = {
+    block-project-ssh-keys = "true"   # Block project-level SSH keys
+    enable-oslogin         = "FALSE"  # Disable OS Login (IAM-based SSH)
+    # Add our SSH key to instance metadata so guest agent configures it
+    # Format: username:ssh-key-content
+    ssh-keys               = var.ssh_username != "" && var.ssh_public_key != "" ? "${var.ssh_username}:${var.ssh_public_key}" : null
+  }
+
+  tags = ["cloud-agent", var.vm_name]
 
   labels = {
     purpose       = "cloud-agent"
     owner         = var.owner
     skip_deletion = var.skip_deletion
   }
-}
 
-# Firewall rule to allow SSH (restricted to allowed_ips)
-resource "google_compute_firewall" "cloud_agent_ssh" {
-  name    = "cloud-agent-allow-ssh"
-  network = "default"
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  # Only allow connections from specified IPs (Terraform replaces all rules on each apply)
-  # allowed_ips is required - no fallback to 0.0.0.0/0 for security
-  source_ranges = var.allowed_ips
-  target_tags   = ["cloud-agent"]
+  # Ensure network is created before VM
+  depends_on = [
+    google_compute_network.cloud_agent,
+    google_compute_subnetwork.cloud_agent,
+    google_compute_firewall.cloud_agent_ssh,
+    google_compute_firewall.cloud_agent_egress
+  ]
 }
 
 output "cloud_agent_ip" {
@@ -162,3 +222,12 @@ output "service_account_email" {
   description = "Service account email for cloud-agent (null if no permissions specified)"
 }
 
+output "network_name" {
+  value       = google_compute_network.cloud_agent.name
+  description = "Name of the dedicated VPC network for this cloud-agent"
+}
+
+output "subnet_name" {
+  value       = google_compute_subnetwork.cloud_agent.name
+  description = "Name of the subnet for this cloud-agent"
+}

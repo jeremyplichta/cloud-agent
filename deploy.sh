@@ -9,6 +9,17 @@ log() {
     echo "[$(date +'%H:%M:%S')] $1"
 }
 
+# Get the correct CIDR suffix for an IP address
+# IPv4 uses /32 for a single host, IPv6 uses /128
+get_cidr_suffix() {
+    local ip="$1"
+    if [[ "$ip" == *:* ]]; then
+        echo "/128"
+    else
+        echo "/32"
+    fi
+}
+
 # List available agent hooks
 list_agents() {
     local agents=()
@@ -64,6 +75,8 @@ Options:
   --ip ADDRESS      Additional IP address to whitelist for SSH access
                     By default, only your current public IP is allowed
                     Use this to add another IP (e.g., for accessing from a different location)
+  --username NAME   Override the derived username/owner (e.g., jeremy_plichta_redis_com)
+                    By default, derived from \$USER and \$COMPANY env vars
   --list            List cloud-agent VMs and their status
   --start           Start a stopped cloud-agent VM
   --stop            Stop (but don't delete) the cloud-agent VM
@@ -72,6 +85,8 @@ Options:
   --scp SRC DST     Copy files to/from VM using 'vm:' prefix for remote paths
                     Examples: ca --scp ./file.txt vm:/workspace/
                               ca --scp vm:/workspace/file.txt ./
+  --tf              Re-apply terraform with current variables (useful for updating
+                    firewall rules, SSH keys, or other infrastructure changes)
   -h, --help        Show this help message
 
 Environment Variables:
@@ -86,6 +101,9 @@ Environment Variables:
   SKIP_DELETION     Set skip_deletion label (default: yes)
   PERMISSIONS       Comma-separated permissions for VM service account
   ADDITIONAL_IP     Additional IP to whitelist for SSH access (same as --ip)
+  COMPANY           Company domain to append to username (e.g., redis.com)
+                    Results in owner like: firstname_lastname_redis_com
+  USERNAME          Override derived username/owner (same as --username)
 
 Examples:
   # Deploy current repo (auto-detects origin remote)
@@ -126,6 +144,45 @@ Examples:
   $0 --ip 192.168.1.100 git@github.com:org/repo.git  # Allow your IP + another IP
 EOF
     exit 0
+}
+
+# Derive owner from $USER, $COMPANY, and optional override
+# Usage: get_owner [override]
+# Returns: owner in format firstname_lastname or firstname_lastname_company_com
+get_owner() {
+    local override="${1:-${USERNAME:-}}"
+
+    # If override is provided, use it directly (just normalize)
+    if [ -n "$override" ]; then
+        echo "$override" | tr '[:upper:]' '[:lower:]' | tr '.-' '_'
+        return
+    fi
+
+    local owner
+    if [[ "$USER" == *.* ]]; then
+        # User has firstname.lastname format
+        owner=$(echo "$USER" | tr '.' '_')
+    else
+        owner="$USER"
+    fi
+
+    # Append company if COMPANY env var is set
+    if [ -n "${COMPANY:-}" ]; then
+        # Convert company domain to underscore format (redis.com -> redis_com)
+        local company_suffix=$(echo "$COMPANY" | tr '[:upper:]' '[:lower:]' | tr '.-' '_')
+        owner="${owner}_${company_suffix}"
+    fi
+
+    # Normalize to lowercase
+    echo "$owner" | tr '[:upper:]' '[:lower:]'
+}
+
+# Get SSH username - same as owner but with hyphens instead of underscores
+# (Linux usernames work better with hyphens)
+# Returns: firstname-lastname or firstname-lastname-company-com
+get_ssh_username() {
+    # Get the owner format and convert underscores to hyphens
+    get_owner | tr '_' '-'
 }
 
 # Get VM name based on $USER
@@ -186,9 +243,49 @@ handle_vm_command() {
             exit 0
             ;;
         ssh)
-            log "Connecting to $vm_name and attaching to tmux..."
-            # Try to attach to existing session, or create new one
-            gcloud compute ssh "$vm_name" --zone="$zone" -- -t "tmux attach-session 2>/dev/null || tmux new-session"
+            # Get VM IP from terraform state or gcloud
+            local vm_ip=""
+            if [ -f "$SCRIPT_DIR/terraform.tfstate" ]; then
+                vm_ip=$(cd "$SCRIPT_DIR" && terraform output -raw cloud_agent_ip 2>/dev/null || true)
+            fi
+            if [ -z "$vm_ip" ]; then
+                vm_ip=$(gcloud compute instances describe "$vm_name" --zone="$zone" --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || true)
+            fi
+            if [ -z "$vm_ip" ]; then
+                log "❌ Could not determine VM IP address"
+                exit 1
+            fi
+
+            # Determine SSH key and username
+            local ssh_key=""
+            if [ -n "$SSH_KEY" ]; then
+                ssh_key="$SSH_KEY"
+            elif [ -f "$HOME/.ssh/cloud-auggie" ]; then
+                ssh_key="$HOME/.ssh/cloud-auggie"
+            elif [ -f "$HOME/.ssh/cloud-agent" ]; then
+                ssh_key="$HOME/.ssh/cloud-agent"
+            elif [ -f "$HOME/.ssh/id_ed25519" ]; then
+                ssh_key="$HOME/.ssh/id_ed25519"
+            elif [ -f "$HOME/.ssh/id_rsa" ]; then
+                ssh_key="$HOME/.ssh/id_rsa"
+            fi
+
+            # Derive SSH username (same logic as terraform config)
+            local ssh_user=$(get_ssh_username)
+
+            # Warn if COMPANY is not set (common source of SSH issues)
+            if [ -z "${COMPANY:-}" ]; then
+                log "⚠️  WARNING: COMPANY env var not set"
+                log "   SSH username: $ssh_user"
+                log "   If this doesn't match your VM's configured user, set: export COMPANY=your.domain"
+            fi
+
+            log "Connecting to $vm_name ($vm_ip) as $ssh_user..."
+            log "Using SSH key: $ssh_key"
+
+            # Use direct SSH with explicit key (bypasses gcloud's key management)
+            ssh -i "$ssh_key" -o StrictHostKeyChecking=accept-new \
+                "$ssh_user@$vm_ip" -t "tmux attach-session 2>/dev/null || tmux new-session"
             exit 0
             ;;
         scp)
@@ -202,12 +299,167 @@ handle_vm_command() {
                 log "     ca --scp vm:/workspace/file.txt ./        # Download from VM"
                 exit 1
             fi
-            # Replace 'vm:' prefix with actual VM name
-            src="${src//vm:/$vm_name:}"
-            dst="${dst//vm:/$vm_name:}"
+
+            # Get VM IP from terraform state or gcloud
+            local vm_ip=""
+            if [ -f "$SCRIPT_DIR/terraform.tfstate" ]; then
+                vm_ip=$(cd "$SCRIPT_DIR" && terraform output -raw cloud_agent_ip 2>/dev/null || true)
+            fi
+            if [ -z "$vm_ip" ]; then
+                vm_ip=$(gcloud compute instances describe "$vm_name" --zone="$zone" --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || true)
+            fi
+            if [ -z "$vm_ip" ]; then
+                log "❌ Could not determine VM IP address"
+                exit 1
+            fi
+
+            # Determine SSH key
+            local ssh_key=""
+            if [ -n "$SSH_KEY" ]; then
+                ssh_key="$SSH_KEY"
+            elif [ -f "$HOME/.ssh/cloud-auggie" ]; then
+                ssh_key="$HOME/.ssh/cloud-auggie"
+            elif [ -f "$HOME/.ssh/cloud-agent" ]; then
+                ssh_key="$HOME/.ssh/cloud-agent"
+            elif [ -f "$HOME/.ssh/id_ed25519" ]; then
+                ssh_key="$HOME/.ssh/id_ed25519"
+            elif [ -f "$HOME/.ssh/id_rsa" ]; then
+                ssh_key="$HOME/.ssh/id_rsa"
+            fi
+
+            # Derive SSH username
+            local ssh_user=$(get_ssh_username)
+
+            # Warn if COMPANY is not set
+            if [ -z "${COMPANY:-}" ]; then
+                log "⚠️  WARNING: COMPANY env var not set"
+                log "   SSH username: $ssh_user"
+                log "   If this doesn't match your VM's configured user, set: export COMPANY=your.domain"
+            fi
+
+            # Replace 'vm:' prefix with user@ip:
+            src="${src//vm:/$ssh_user@$vm_ip:}"
+            dst="${dst//vm:/$ssh_user@$vm_ip:}"
+
             log "Copying files..."
-            gcloud compute scp --zone="$zone" --recurse "$src" "$dst"
+            scp -i "$ssh_key" -o StrictHostKeyChecking=accept-new -r "$src" "$dst"
             log "✅ Copy complete"
+            exit 0
+            ;;
+        tf)
+            # Re-apply terraform with current variables
+            log "Re-applying terraform configuration..."
+
+            # Check for terraform state
+            if [ ! -f "$SCRIPT_DIR/terraform.tfstate" ]; then
+                log "❌ ERROR: No terraform state found. Create VM first with: ca <repo>"
+                exit 1
+            fi
+
+            # Get GCP project ID
+            local project_id=$(gcloud config get-value project 2>/dev/null)
+            if [ -z "$project_id" ]; then
+                log "❌ ERROR: No GCP project configured. Run: gcloud config set project PROJECT_ID"
+                exit 1
+            fi
+
+            # Configuration
+            local region="${REGION:-us-central1}"
+            local cluster_zone="${CLUSTER_ZONE:-$zone}"
+            local machine_type="${MACHINE_TYPE:-n2-standard-4}"
+            local cluster_name="${CLUSTER_NAME:-}"
+            local skip_deletion="${SKIP_DELETION:-yes}"
+            local permissions="${PERMISSIONS:-}"
+            local additional_ip="${ADDITIONAL_IP:-}"
+
+            # Derive owner using helper function
+            local owner=$(get_owner)
+
+            # Convert comma-separated permissions to Terraform list format
+            local permissions_tf
+            if [ -n "$permissions" ]; then
+                permissions_tf=$(echo "$permissions" | sed 's/,/", "/g' | sed 's/^/["/' | sed 's/$/"]/')
+            else
+                permissions_tf="[]"
+            fi
+
+            # Get current public IP for firewall rules
+            log "Detecting your public IP address..."
+            local my_public_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
+            if [ -z "$my_public_ip" ]; then
+                log "❌ ERROR: Could not detect your public IP address."
+                exit 1
+            fi
+            log "✓ Your public IP: $my_public_ip"
+
+            # Build allowed_ips list (using correct CIDR suffix for IPv4 vs IPv6)
+            local my_cidr_suffix=$(get_cidr_suffix "$my_public_ip")
+            local allowed_ips="${my_public_ip}${my_cidr_suffix}"
+            if [ -n "$additional_ip" ]; then
+                if [[ ! "$additional_ip" =~ / ]]; then
+                    local additional_cidr_suffix=$(get_cidr_suffix "$additional_ip")
+                    additional_ip="${additional_ip}${additional_cidr_suffix}"
+                fi
+                allowed_ips="${allowed_ips},${additional_ip}"
+                log "✓ Additional whitelisted IP: $additional_ip"
+            fi
+            local allowed_ips_tf=$(echo "$allowed_ips" | sed 's/,/", "/g' | sed 's/^/["/' | sed 's/$/"]/')
+            log "✓ Firewall will only allow SSH from: $allowed_ips"
+
+            # Detect SSH key for SSH hardening
+            local ssh_key_for_vm=""
+            if [ -z "$SSH_KEY" ]; then
+                if [ -f "$HOME/.ssh/cloud-auggie" ]; then
+                    ssh_key_for_vm="$HOME/.ssh/cloud-auggie"
+                elif [ -f "$HOME/.ssh/cloud-agent" ]; then
+                    ssh_key_for_vm="$HOME/.ssh/cloud-agent"
+                elif [ -f "$HOME/.ssh/id_ed25519" ]; then
+                    ssh_key_for_vm="$HOME/.ssh/id_ed25519"
+                elif [ -f "$HOME/.ssh/id_rsa" ]; then
+                    ssh_key_for_vm="$HOME/.ssh/id_rsa"
+                fi
+            else
+                ssh_key_for_vm="$SSH_KEY"
+            fi
+
+            # Get SSH public key content and username
+            local ssh_username=""
+            local ssh_public_key=""
+            if [ -n "$ssh_key_for_vm" ] && [ -f "${ssh_key_for_vm}.pub" ]; then
+                ssh_public_key=$(cat "${ssh_key_for_vm}.pub")
+                ssh_username=$(get_ssh_username)
+                log "✓ SSH will be secured for user: $ssh_username"
+                log "✓ Using public key from: ${ssh_key_for_vm}.pub"
+            else
+                log "⚠️  No SSH public key found. SSH will not be hardened to a specific user."
+            fi
+
+            # Write terraform.tfvars
+            log ""
+            log "Updating terraform.tfvars..."
+            cat > "$SCRIPT_DIR/terraform.tfvars" << EOF
+project_id     = "$project_id"
+region         = "$region"
+zone           = "$zone"
+machine_type   = "$machine_type"
+cluster_name   = "$cluster_name"
+cluster_zone   = "$cluster_zone"
+vm_name        = "$vm_name"
+owner          = "$owner"
+skip_deletion  = "$skip_deletion"
+permissions    = $permissions_tf
+allowed_ips    = $allowed_ips_tf
+ssh_username   = "$ssh_username"
+ssh_public_key = "$ssh_public_key"
+EOF
+
+            log ""
+            log "Applying Terraform..."
+            cd "$SCRIPT_DIR"
+            terraform apply -auto-approve
+
+            log ""
+            log "✅ Terraform apply complete!"
             exit 0
             ;;
     esac
@@ -257,6 +509,10 @@ while [[ $# -gt 0 ]]; do
             ADDITIONAL_IP="$2"
             shift 2
             ;;
+        --username)
+            USERNAME="$2"
+            shift 2
+            ;;
         --list)
             handle_vm_command "list"
             ;;
@@ -274,6 +530,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --scp)
             handle_vm_command "scp" "$2" "$3"
+            ;;
+        --tf)
+            handle_vm_command "tf"
             ;;
         -h|--help)
             usage
@@ -338,29 +597,9 @@ CLUSTER_ZONE="${CLUSTER_ZONE:-$ZONE}"
 MACHINE_TYPE="${MACHINE_TYPE:-n2-standard-4}"
 CLUSTER_NAME="${CLUSTER_NAME:-}"
 
-# Derive VM name and owner from $USER
-# Expected format: firstname.lastname
-if [[ "$USER" == *.* ]]; then
-    # User has firstname.lastname format
-    OWNER=$(echo "$USER" | tr '.' '_')
-    VM_NAME="${USER}-cloud-agent"
-else
-    # Prompt for first and last name
-    log "⚠️  Cannot determine owner from \$USER ($USER)"
-    log "   Expected format: firstname.lastname"
-    read -p "Enter your first name: " FIRST_NAME
-    read -p "Enter your last name: " LAST_NAME
-    if [ -z "$FIRST_NAME" ] || [ -z "$LAST_NAME" ]; then
-        log "❌ ERROR: First and last name are required"
-        exit 1
-    fi
-    OWNER="${FIRST_NAME}_${LAST_NAME}"
-    VM_NAME="${FIRST_NAME}.${LAST_NAME}-cloud-agent"
-fi
-
-# Normalize VM name (GCP requires lowercase, no dots or underscores)
-VM_NAME=$(echo "$VM_NAME" | tr '[:upper:]' '[:lower:]' | tr '_.' '-')
-OWNER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+# Derive VM name and owner
+VM_NAME=$(get_vm_name)
+OWNER=$(get_owner)
 
 log "VM name: $VM_NAME"
 log "Owner: $OWNER"
@@ -429,12 +668,14 @@ if [ "$CREATE_VM" = "yes" ]; then
     fi
     log "✓ Your public IP: $MY_PUBLIC_IP"
 
-    # Build allowed_ips list (always in CIDR notation)
-    ALLOWED_IPS="${MY_PUBLIC_IP}/32"
+    # Build allowed_ips list (using correct CIDR suffix for IPv4 vs IPv6)
+    MY_CIDR_SUFFIX=$(get_cidr_suffix "$MY_PUBLIC_IP")
+    ALLOWED_IPS="${MY_PUBLIC_IP}${MY_CIDR_SUFFIX}"
     if [ -n "$ADDITIONAL_IP" ]; then
-        # Add /32 if not already in CIDR notation
+        # Add CIDR suffix if not already in CIDR notation
         if [[ ! "$ADDITIONAL_IP" =~ / ]]; then
-            ADDITIONAL_IP="${ADDITIONAL_IP}/32"
+            ADDITIONAL_CIDR_SUFFIX=$(get_cidr_suffix "$ADDITIONAL_IP")
+            ADDITIONAL_IP="${ADDITIONAL_IP}${ADDITIONAL_CIDR_SUFFIX}"
         fi
         ALLOWED_IPS="${ALLOWED_IPS},${ADDITIONAL_IP}"
         log "✓ Additional whitelisted IP: $ADDITIONAL_IP"
@@ -464,8 +705,7 @@ if [ "$CREATE_VM" = "yes" ]; then
     SSH_PUBLIC_KEY=""
     if [ -n "$SSH_KEY_FOR_VM" ] && [ -f "${SSH_KEY_FOR_VM}.pub" ]; then
         SSH_PUBLIC_KEY=$(cat "${SSH_KEY_FOR_VM}.pub")
-        # Derive username from local $USER (cloud-agent style)
-        SSH_USERNAME=$(echo "$USER" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
+        SSH_USERNAME=$(get_ssh_username)
         log "✓ SSH will be secured for user: $SSH_USERNAME"
         log "✓ Using public key from: ${SSH_KEY_FOR_VM}.pub"
     else
@@ -531,43 +771,63 @@ if [ "$SKIP_CREDS" = false ]; then
         fi
     fi
 
+    # Get VM IP for direct SSH (we use direct SSH instead of gcloud ssh because
+    # we've disabled project-level SSH keys for security)
+    VM_IP=$(cd "$SCRIPT_DIR" && terraform output -raw cloud_agent_ip 2>/dev/null || true)
+    if [ -z "$VM_IP" ]; then
+        VM_IP=$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || true)
+    fi
+    if [ -z "$VM_IP" ]; then
+        log "❌ Could not determine VM IP address"
+        exit 1
+    fi
+
+    # Get SSH username (must match what was configured in terraform)
+    CRED_SSH_USER=$(get_ssh_username)
+    log "Using SSH: $CRED_SSH_USER@$VM_IP"
+
+    # Helper function for running SSH commands on the VM
+    vm_ssh() {
+        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+            "$CRED_SSH_USER@$VM_IP" "$@"
+    }
+
+    # Helper function for SCP to the VM
+    vm_scp() {
+        scp -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$@"
+    }
+
     # SSH key (recommended for enterprise orgs)
     if [ -n "$SSH_KEY" ]; then
         if [ -f "$SSH_KEY" ]; then
-            log "Transferring SSH key..."
+            log "Transferring GitHub SSH key..."
             # First, create ~/.ssh directory on the VM
-            gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="mkdir -p ~/.ssh && chmod 700 ~/.ssh" 2>/dev/null
+            vm_ssh "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
 
-            # Transfer the private key
-            if ! gcloud compute scp "$SSH_KEY" "$VM_NAME":~/.ssh/id_ed25519 --zone="$ZONE"; then
+            # Transfer the private key (for git operations)
+            if ! vm_scp "$SSH_KEY" "$CRED_SSH_USER@$VM_IP:~/.ssh/id_ed25519"; then
                 log "❌ Failed to transfer SSH private key"
                 exit 1
             fi
 
             # Transfer the public key if it exists
             if [ -f "${SSH_KEY}.pub" ]; then
-                if ! gcloud compute scp "${SSH_KEY}.pub" "$VM_NAME":~/.ssh/id_ed25519.pub --zone="$ZONE"; then
+                if ! vm_scp "${SSH_KEY}.pub" "$CRED_SSH_USER@$VM_IP:~/.ssh/id_ed25519.pub"; then
                     log "⚠️  Failed to transfer SSH public key"
                 fi
             fi
 
             # Configure SSH on the VM
-            gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
+            vm_ssh "
                 chmod 600 ~/.ssh/id_ed25519
                 chmod 644 ~/.ssh/id_ed25519.pub 2>/dev/null || true
-                # Add public key to authorized_keys for direct SSH access
-                if [ -f ~/.ssh/id_ed25519.pub ]; then
-                    cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
-                    chmod 600 ~/.ssh/authorized_keys
-                    echo '✅ Public key added to authorized_keys'
-                fi
                 # Add GitHub to known_hosts to avoid prompt
                 ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
                 git config --global user.email 'cloud-agent@localhost'
                 git config --global user.name 'Cloud Agent'
-                echo '✅ SSH key configured'
+                echo '✅ SSH key configured for git'
             "
-            log "✅ SSH key transferred"
+            log "✅ GitHub SSH key transferred"
         else
             log "❌ SSH key not found: $SSH_KEY"
             exit 1
@@ -575,14 +835,14 @@ if [ "$SKIP_CREDS" = false ]; then
     # GitHub PAT (for personal repos / non-enterprise)
     elif [ -n "$GITHUB_TOKEN" ]; then
         log "Transferring GitHub credentials (PAT)..."
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
+        vm_ssh "
             git config --global credential.helper store
             echo 'https://oauth2:$GITHUB_TOKEN@github.com' > ~/.git-credentials
             chmod 600 ~/.git-credentials
             git config --global user.email 'cloud-agent@localhost'
             git config --global user.name 'Cloud Agent'
             echo '✅ GitHub credentials configured'
-        " 2>/dev/null
+        "
         log "✅ GitHub PAT transferred"
     else
         log "⚠️  No SSH key found and no GITHUB_TOKEN set."
@@ -591,16 +851,54 @@ if [ "$SKIP_CREDS" = false ]; then
         log "   Or create a key: ssh-keygen -t ed25519 -f ~/.ssh/cloud-agent -N ''"
     fi
 
-    # Agent credentials (using hook)
-    log "Transferring $HOOK_DISPLAY_NAME credentials..."
-    AGENT_TOKEN=$(hook_get_token)
+    # Transfer ALL agent credentials (not just the selected one)
+    # This allows switching agents on the VM without re-deploying
+    log ""
+    log "Transferring AI agent credentials..."
 
-    if [ -n "$AGENT_TOKEN" ]; then
-        hook_transfer_credentials "$ZONE" "$AGENT_TOKEN" "$VM_NAME"
-        log "✅ $HOOK_DISPLAY_NAME credentials transferred"
+    # Augment credentials
+    if [ -f "$HOME/.augment/session.json" ]; then
+        log "  Transferring Augment credentials..."
+        TEMP_AUGMENT=$(mktemp)
+        cat "$HOME/.augment/session.json" > "$TEMP_AUGMENT"
+        if vm_scp "$TEMP_AUGMENT" "$CRED_SSH_USER@$VM_IP:~/augment-session-temp.json"; then
+            vm_ssh "mkdir -p ~/.augment && mv ~/augment-session-temp.json ~/.augment/session.json && chmod 600 ~/.augment/session.json"
+            log "  ✅ Augment credentials transferred"
+        fi
+        rm -f "$TEMP_AUGMENT"
     else
-        log "⚠️  No $HOOK_DISPLAY_NAME credentials found."
-        log "   $(hook_login_instructions)"
+        log "  ⚠️  No Augment credentials found (~/.augment/session.json)"
+        log "     Run 'auggie login' locally to configure"
+    fi
+
+    # Claude Code credentials
+    if [ -f "$HOME/.claude.json" ]; then
+        log "  Transferring Claude Code credentials..."
+        TEMP_CLAUDE=$(mktemp)
+        cat "$HOME/.claude.json" > "$TEMP_CLAUDE"
+        if vm_scp "$TEMP_CLAUDE" "$CRED_SSH_USER@$VM_IP:~/.claude.json"; then
+            vm_ssh "chmod 600 ~/.claude.json && mkdir -p ~/.claude"
+            log "  ✅ Claude Code credentials transferred"
+        fi
+        rm -f "$TEMP_CLAUDE"
+    else
+        log "  ⚠️  No Claude Code credentials found (~/.claude.json)"
+        log "     Run 'claude' locally to configure"
+    fi
+
+    # Codex credentials
+    if [ -f "$HOME/.codex/config.toml" ]; then
+        log "  Transferring Codex credentials..."
+        TEMP_CODEX=$(mktemp)
+        cat "$HOME/.codex/config.toml" > "$TEMP_CODEX"
+        if vm_scp "$TEMP_CODEX" "$CRED_SSH_USER@$VM_IP:~/codex-config-temp.toml"; then
+            vm_ssh "mkdir -p ~/.codex && mv ~/codex-config-temp.toml ~/.codex/config.toml && chmod 600 ~/.codex/config.toml"
+            log "  ✅ Codex credentials transferred"
+        fi
+        rm -f "$TEMP_CODEX"
+    else
+        log "  ⚠️  No Codex credentials found (~/.codex/config.toml)"
+        log "     Run 'codex' locally to configure"
     fi
 fi
 
@@ -609,14 +907,43 @@ if [ ${#REPOS[@]} -gt 0 ]; then
     log ""
     log "Cloning repositories to VM..."
 
+    # Get VM IP if not already set (may have been set in credential transfer)
+    if [ -z "${VM_IP:-}" ]; then
+        VM_IP=$(cd "$SCRIPT_DIR" && terraform output -raw cloud_agent_ip 2>/dev/null || true)
+        if [ -z "$VM_IP" ]; then
+            VM_IP=$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || true)
+        fi
+    fi
+
+    # Get SSH username if not already set
+    if [ -z "${CRED_SSH_USER:-}" ]; then
+        CRED_SSH_USER=$(get_ssh_username)
+    fi
+
+    # Auto-detect SSH key if not set
+    if [ -z "${SSH_KEY:-}" ]; then
+        for key_path in "$HOME/.ssh/cloud-auggie" "$HOME/.ssh/cloud-agent" "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa"; do
+            if [ -f "$key_path" ]; then
+                SSH_KEY="$key_path"
+                break
+            fi
+        done
+    fi
+
+    # Helper function for running SSH commands on the VM (redefine if not in creds block)
+    vm_ssh() {
+        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+            "$CRED_SSH_USER@$VM_IP" "$@"
+    }
+
     # Ensure /workspace is writable (in case startup script hasn't run or VM was created before this fix)
-    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod 777 /workspace 2>/dev/null || true" 2>/dev/null
+    vm_ssh "sudo chmod 777 /workspace 2>/dev/null || true" 2>/dev/null
 
     for repo in "${REPOS[@]}"; do
         repo_name=$(basename "$repo" .git)
         log "  Cloning $repo_name..."
 
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
+        vm_ssh "
             cd /workspace
             if [ -d '$repo_name' ]; then
                 echo '  ⚠️  $repo_name already exists, pulling latest...'
@@ -637,7 +964,24 @@ fi
 # List workspace contents
 log ""
 log "Workspace contents:"
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="ls -la /workspace/" 2>/dev/null
+# Get VM IP if not already set
+if [ -z "${VM_IP:-}" ]; then
+    VM_IP=$(cd "$SCRIPT_DIR" && terraform output -raw cloud_agent_ip 2>/dev/null || true)
+fi
+if [ -z "${CRED_SSH_USER:-}" ]; then
+    CRED_SSH_USER=$(get_ssh_username)
+fi
+if [ -z "${SSH_KEY:-}" ]; then
+    for key_path in "$HOME/.ssh/cloud-auggie" "$HOME/.ssh/cloud-agent" "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa"; do
+        if [ -f "$key_path" ]; then
+            SSH_KEY="$key_path"
+            break
+        fi
+    done
+fi
+if [ -n "${VM_IP:-}" ] && [ -n "${SSH_KEY:-}" ]; then
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$CRED_SSH_USER@$VM_IP" "ls -la /workspace/" 2>/dev/null
+fi
 
 AGENT_CMD=$(hook_agent_command)
 
@@ -650,7 +994,7 @@ log "Connect to VM (with tmux):"
 log "  ca --ssh"
 log ""
 log "Or manually SSH:"
-log "  gcloud compute ssh $VM_NAME --zone=$ZONE"
+log "  ssh -i ~/.ssh/cloud-auggie $CRED_SSH_USER@$VM_IP"
 log ""
 log "Start working:"
 log "  cd /workspace/<repo-name>"

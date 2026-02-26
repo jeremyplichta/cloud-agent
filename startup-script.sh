@@ -41,14 +41,20 @@ curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stabl
 chmod +x kubectl
 mv kubectl /usr/local/bin/
 
-# Install Node.js 22 (required for Auggie CLI)
+# Install Node.js 22 (required for AI coding agents)
 log "Installing Node.js 22..."
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get install -y nodejs
 
-# Install Auggie CLI
-log "Installing Auggie CLI..."
+# Install AI coding agent CLIs
+log "Installing Auggie CLI (Augment Code)..."
 npm install -g @augmentcode/auggie
+
+log "Installing Claude Code CLI (Anthropic)..."
+npm install -g @anthropic-ai/claude-code
+
+log "Installing Codex CLI (OpenAI)..."
+npm install -g @openai/codex
 
 # Configure kubectl for the cluster (if cluster_name is provided)
 if [ -n "${cluster_name}" ] && [ "${cluster_name}" != "" ]; then
@@ -123,13 +129,19 @@ log "Preparing workspace..."
 cat > /workspace/README.md << EOF
 # Cloud Agent Workspace
 
-This VM is ready to run Augment AI.
+This VM is ready to run AI coding agents.
+
+## Available Agents
+
+- **Auggie** (Augment Code): \`auggie\`
+- **Claude Code** (Anthropic): \`claude\`
+- **Codex** (OpenAI): \`codex\`
 
 ## Quick Start
 
 1. Start tmux session:
    \`\`\`
-   tmux new -s auggie
+   tmux new -s agent
    \`\`\`
 
 2. Navigate to workspace:
@@ -137,7 +149,7 @@ This VM is ready to run Augment AI.
    cd /workspace
    \`\`\`
 
-3. Run Augment and start working!
+3. Run your preferred agent and start working!
 
 ## VM Info
 
