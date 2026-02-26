@@ -20,6 +20,35 @@ get_cidr_suffix() {
     fi
 }
 
+# Detect public IPv4 address for firewall rules
+# GCP firewall rules don't allow mixing IPv4 and IPv6, and VMs are typically IPv4-only
+# So we prioritize IPv4, but fall back to IPv6 if that's all the user has
+# Returns the IP with CIDR notation, logs to stderr
+detect_public_ips() {
+    local ip=""
+    local version=""
+
+    # Try to get IPv4 address first (most important - GCP VMs are usually IPv4-only)
+    ip=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null || curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
+    if [ -n "$ip" ]; then
+        echo "[$(date +'%H:%M:%S')] ✓ Your IPv4 address: $ip" >&2
+        echo "${ip}/32"
+        return 0
+    fi
+
+    # Fall back to IPv6 only if no IPv4 is available
+    ip=$(curl -6 -s --connect-timeout 5 ifconfig.me 2>/dev/null || curl -6 -s --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
+    if [ -n "$ip" ]; then
+        echo "[$(date +'%H:%M:%S')] ⚠️  No IPv4 address found, using IPv6: $ip" >&2
+        echo "[$(date +'%H:%M:%S')] ⚠️  Note: GCP VMs are typically IPv4-only. You may need to use a VPN or different network." >&2
+        echo "${ip}/128"
+        return 0
+    fi
+
+    echo "[$(date +'%H:%M:%S')] ❌ ERROR: Could not detect any public IP address." >&2
+    return 1
+}
+
 # List available agent hooks
 list_agents() {
     local agents=()
@@ -383,18 +412,14 @@ handle_vm_command() {
                 permissions_tf="[]"
             fi
 
-            # Get current public IP for firewall rules
-            log "Detecting your public IP address..."
-            local my_public_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
-            if [ -z "$my_public_ip" ]; then
-                log "❌ ERROR: Could not detect your public IP address."
+            # Get current public IPs for firewall rules (both IPv4 and IPv6)
+            log "Detecting your public IP addresses..."
+            local allowed_ips=$(detect_public_ips)
+            if [ -z "$allowed_ips" ]; then
                 exit 1
             fi
-            log "✓ Your public IP: $my_public_ip"
 
-            # Build allowed_ips list (using correct CIDR suffix for IPv4 vs IPv6)
-            local my_cidr_suffix=$(get_cidr_suffix "$my_public_ip")
-            local allowed_ips="${my_public_ip}${my_cidr_suffix}"
+            # Add any additional IP
             if [ -n "$additional_ip" ]; then
                 if [[ ! "$additional_ip" =~ / ]]; then
                     local additional_cidr_suffix=$(get_cidr_suffix "$additional_ip")
@@ -404,7 +429,7 @@ handle_vm_command() {
                 log "✓ Additional whitelisted IP: $additional_ip"
             fi
             local allowed_ips_tf=$(echo "$allowed_ips" | sed 's/,/", "/g' | sed 's/^/["/' | sed 's/$/"]/')
-            log "✓ Firewall will only allow SSH from: $allowed_ips"
+            log "✓ Firewall will allow SSH from: $allowed_ips"
 
             # Detect SSH key for SSH hardening
             local ssh_key_for_vm=""
@@ -657,20 +682,17 @@ if [ "$CREATE_VM" = "yes" ]; then
         PERMISSIONS_TF="[]"
     fi
 
-    # Get current public IP for firewall rules (required - no fallback to 0.0.0.0/0)
-    log "Detecting your public IP address..."
-    MY_PUBLIC_IP=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
-    if [ -z "$MY_PUBLIC_IP" ]; then
-        log "❌ ERROR: Could not detect your public IP address."
+    # Get current public IPs for firewall rules (both IPv4 and IPv6)
+    # GCP VMs are typically IPv4-only, so IPv4 is most important
+    log "Detecting your public IP addresses..."
+    ALLOWED_IPS=$(detect_public_ips)
+    if [ -z "$ALLOWED_IPS" ]; then
         log "   This is required to secure the firewall rules."
         log "   Please check your internet connection and try again."
         exit 1
     fi
-    log "✓ Your public IP: $MY_PUBLIC_IP"
 
-    # Build allowed_ips list (using correct CIDR suffix for IPv4 vs IPv6)
-    MY_CIDR_SUFFIX=$(get_cidr_suffix "$MY_PUBLIC_IP")
-    ALLOWED_IPS="${MY_PUBLIC_IP}${MY_CIDR_SUFFIX}"
+    # Add any additional IP
     if [ -n "$ADDITIONAL_IP" ]; then
         # Add CIDR suffix if not already in CIDR notation
         if [[ ! "$ADDITIONAL_IP" =~ / ]]; then
@@ -682,7 +704,7 @@ if [ "$CREATE_VM" = "yes" ]; then
     fi
     # Convert to Terraform list format: ["1.2.3.4/32", "5.6.7.8/32"]
     ALLOWED_IPS_TF=$(echo "$ALLOWED_IPS" | sed 's/,/", "/g' | sed 's/^/["/' | sed 's/$/"]/')
-    log "✓ Firewall will only allow SSH from: $ALLOWED_IPS"
+    log "✓ Firewall will allow SSH from: $ALLOWED_IPS"
 
     # Detect SSH key for SSH hardening (prioritize cloud-auggie > cloud-agent > id_ed25519 > id_rsa)
     SSH_KEY_FOR_VM=""
