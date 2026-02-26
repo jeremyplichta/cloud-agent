@@ -1,5 +1,9 @@
 # Cloud Agent (Rust Implementation)
 
+[![CI](https://github.com/jeremyplichta/cloud-agent/workflows/CI/badge.svg)](https://github.com/jeremyplichta/cloud-agent/actions/workflows/ci.yml)
+[![Security](https://github.com/jeremyplichta/cloud-agent/workflows/Security%20Audit/badge.svg)](https://github.com/jeremyplichta/cloud-agent/actions/workflows/security.yml)
+[![Quality](https://github.com/jeremyplichta/cloud-agent/workflows/Code%20Quality/badge.svg)](https://github.com/jeremyplichta/cloud-agent/actions/workflows/quality.yml)
+
 A Rust rewrite of the Cloud Agent deployment tool. This tool helps you create and manage Google Cloud VMs configured for running AI coding agents like Auggie, Claude Code, and Codex.
 
 ## Why Rust?
