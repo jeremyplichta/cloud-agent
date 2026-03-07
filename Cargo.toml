@@ -28,7 +28,8 @@ serde_json = "1.0"
 toml = "0.8"
 
 # HTTP client for IP detection
-reqwest = { version = "0.12", features = ["json"] }
+# Using rustls-tls instead of native-tls to avoid OpenSSL dependency for musl builds
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # SSH client
 russh = "0.45"
