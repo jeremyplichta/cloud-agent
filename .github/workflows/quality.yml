@@ -87,29 +87,7 @@ jobs:
         run: cargo +nightly udeps --all-targets
         continue-on-error: true
 
-  msrv:
-    name: Minimum Supported Rust Version
-    runs-on: ubuntu-latest
-    # MSRV check is informational - don't block PRs if it fails
-    continue-on-error: true
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust 1.80 (MSRV)
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.80"
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Check MSRV
-        run: cargo check --all-features
+  # MSRV check removed - modern Rust crate ecosystem has rapidly evolving
+  # MSRV requirements and this project targets latest stable Rust.
+  # See: https://github.com/rust-lang/rfcs/blob/master/text/2495-min-rust-version.md
 
