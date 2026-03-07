@@ -108,6 +108,11 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Generate MSRV-compatible lock file
+        run: |
+          rm Cargo.lock
+          cargo update
+
       - name: Check MSRV
         run: cargo check --all-features
 
