@@ -1,5 +1,10 @@
 # Cloud Agent 🐕☁️
 
+[![CI](https://github.com/jeremyplichta/cloud-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jeremyplichta/cloud-agent/actions/workflows/ci.yml)
+[![Release](https://github.com/jeremyplichta/cloud-agent/actions/workflows/release-please.yml/badge.svg)](https://github.com/jeremyplichta/cloud-agent/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+
 **Remote GCP VM for running AI coding agents on long-running tasks**
 
 ## What is Cloud Agent?

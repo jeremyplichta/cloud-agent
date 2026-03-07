@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust (latest stable recommended)
 - Google Cloud SDK
 - Terraform
 - Git

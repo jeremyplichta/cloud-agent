@@ -35,7 +35,7 @@ Thumbs.db
 /target/
 **/*.rs.bk
 *.pdb
-Cargo.lock
+# Note: Cargo.lock is tracked for binary crates (reproducible builds)
 
 # Credentials
 *.pem
