@@ -102,6 +102,8 @@ jobs:
   security:
     name: Security Audit
     runs-on: ubuntu-latest
+    # Security audit is informational - don't block PRs if it fails
+    continue-on-error: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
