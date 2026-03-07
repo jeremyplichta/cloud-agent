@@ -57,7 +57,7 @@ jobs:
           fail-on-severity: high
           # Allow known advisories with no fix available
           # RUSTSEC-2023-0071 (rsa crate timing side-channel) - no fix available
-          allow-ghsas: GHSA-c38w-74pf-6m2x
+          allow-ghsas: GHSA-c38w-74pg-36hr
 
   supply-chain:
     name: Supply Chain Security
