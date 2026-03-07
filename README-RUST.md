@@ -29,14 +29,22 @@ The original bash implementation was approaching 1000 lines and becoming difficu
 
 ## Installation
 
+### Quick Install (Recommended)
+
+```bash
+# Download and install pre-built binary
+curl -fsSL https://raw.githubusercontent.com/jeremyplichta/cloud-agent/main/install.sh | bash
+```
+
 ### Prerequisites
 
-- Rust 1.70 or later
 - Google Cloud SDK (`gcloud`)
 - Terraform
 - SSH client
 
 ### Build from Source
+
+Requires Rust (latest stable recommended):
 
 ```bash
 # Clone the repository
@@ -47,10 +55,7 @@ cd cloud-agent
 cargo build --release
 
 # Install to your PATH
-cargo install --path .
-
-# Or create a symlink
-ln -s $(pwd)/target/release/ca ~/.local/bin/ca
+cp target/release/ca ~/.local/bin/
 ```
 
 ## Quick Start

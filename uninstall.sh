@@ -1,12 +1,28 @@
 #!/bin/bash
 #
 # Cloud Agent CLI uninstaller
-# Removes the 'ca' command from your shell
+# Removes the 'ca' binary
 #
 
 set -e
 
-# Detect shell config file
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+BINARY_NAME="ca"
+
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║  🐕 CLOUD AGENT CLI UNINSTALLER                             ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+# Check for binary installation
+if [ -f "$INSTALL_DIR/$BINARY_NAME" ]; then
+    rm "$INSTALL_DIR/$BINARY_NAME"
+    echo "✅ Removed $INSTALL_DIR/$BINARY_NAME"
+else
+    echo "⚠️  Binary not found at $INSTALL_DIR/$BINARY_NAME"
+fi
+
+# Also check for legacy shell function installation
 detect_shell_config() {
     if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ]; then
         echo "${ZDOTDIR:-$HOME}/.zshrc"
@@ -23,23 +39,14 @@ detect_shell_config() {
 
 SHELL_CONFIG=$(detect_shell_config)
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  🐕 CLOUD AGENT CLI UNINSTALLER                             ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-
 if grep -q "# Cloud Agent - run deploy.sh from anywhere" "$SHELL_CONFIG" 2>/dev/null; then
-    # Remove the Cloud Agent function block
     sed -i.bak '/# Cloud Agent - run deploy.sh from anywhere/,/^}/d' "$SHELL_CONFIG"
-    # Clean up any empty lines that might be left behind
-    echo "✅ Removed Cloud Agent command from $SHELL_CONFIG"
+    echo "✅ Removed legacy shell function from $SHELL_CONFIG"
     echo ""
     echo "Restart your terminal or run:"
     echo "  source $SHELL_CONFIG"
-else
-    echo "⚠️  Cloud Agent command not found in $SHELL_CONFIG"
-    echo "   Nothing to uninstall."
 fi
+
 echo ""
 echo "🐕 Goodbye!"
 

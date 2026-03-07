@@ -1,77 +1,117 @@
 #!/bin/bash
 #
 # Cloud Agent CLI installer
-# Adds the 'ca' command to your shell for easy access from anywhere
+# Downloads pre-built binary from GitHub releases
 #
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMMAND_NAME="${1:-ca}"
+REPO="jeremyplichta/cloud-agent"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+BINARY_NAME="ca"
 
-# Detect shell config file
-detect_shell_config() {
-    if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ]; then
-        echo "${ZDOTDIR:-$HOME}/.zshrc"
-    elif [ -n "$BASH_VERSION" ] || [ "$SHELL" = "/bin/bash" ]; then
-        if [ -f "$HOME/.bash_profile" ]; then
-            echo "$HOME/.bash_profile"
-        else
-            echo "$HOME/.bashrc"
-        fi
-    else
-        echo "$HOME/.profile"
-    fi
+# Detect OS and architecture
+detect_platform() {
+    local os arch
+
+    case "$(uname -s)" in
+        Linux*)  os="linux" ;;
+        Darwin*) os="macos" ;;
+        *)       echo "Unsupported OS: $(uname -s)" >&2; exit 1 ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64|amd64)  arch="x86_64" ;;
+        arm64|aarch64) arch="aarch64" ;;
+        *)             echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+    esac
+
+    echo "${os}-${arch}"
 }
 
-SHELL_CONFIG=$(detect_shell_config)
-SHELL_NAME=$(basename "$SHELL")
+# Get latest release tag from GitHub
+get_latest_release() {
+    curl -s "https://api.github.com/repos/${REPO}/releases/latest" | \
+        grep '"tag_name":' | \
+        sed -E 's/.*"([^"]+)".*/\1/'
+}
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  🐕 CLOUD AGENT CLI INSTALLER                               ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Installing '$COMMAND_NAME' command..."
-echo "  Cloud Agent directory: $SCRIPT_DIR"
-echo "  Shell config: $SHELL_CONFIG"
-echo ""
 
-# Create the function definition
-FUNCTION_DEF="
-# Cloud Agent - run deploy.sh from anywhere
-$COMMAND_NAME() {
-    \"$SCRIPT_DIR/deploy.sh\" \"\$@\"
-}"
+# Detect platform
+PLATFORM=$(detect_platform)
+echo "Detected platform: $PLATFORM"
 
-# Check if already installed
-if grep -q "# Cloud Agent - run deploy.sh from anywhere" "$SHELL_CONFIG" 2>/dev/null; then
-    echo "⚠️  Cloud Agent command already installed in $SHELL_CONFIG"
+# Get latest release
+echo "Fetching latest release..."
+VERSION=$(get_latest_release)
+
+if [ -z "$VERSION" ]; then
+    echo "❌ Could not determine latest release."
     echo ""
-    read -p "Reinstall/update? [y/N] " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Cancelled."
-        exit 0
-    fi
-    # Remove old installation
-    sed -i.bak '/# Cloud Agent - run deploy.sh from anywhere/,/^}/d' "$SHELL_CONFIG"
-    echo "Removed old installation."
+    echo "No releases found. You can build from source instead:"
+    echo "  cargo build --release"
+    echo "  cp target/release/ca ~/.local/bin/"
+    exit 1
 fi
 
-# Append to shell config
-echo "$FUNCTION_DEF" >> "$SHELL_CONFIG"
+echo "Latest version: $VERSION"
+echo ""
 
-echo "✅ Installed '$COMMAND_NAME' command!"
+# Construct download URL
+ASSET_NAME="ca-${PLATFORM}.tar.gz"
+DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET_NAME}"
+
+echo "Downloading $ASSET_NAME..."
+
+# Create install directory if needed
+mkdir -p "$INSTALL_DIR"
+
+# Download and extract
+TEMP_DIR=$(mktemp -d)
+trap "rm -rf $TEMP_DIR" EXIT
+
+if ! curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_DIR/$ASSET_NAME"; then
+    echo "❌ Failed to download $DOWNLOAD_URL"
+    echo ""
+    echo "The release may not have binaries for your platform yet."
+    echo "You can build from source instead:"
+    echo "  cargo build --release"
+    echo "  cp target/release/ca ~/.local/bin/"
+    exit 1
+fi
+
+tar -xzf "$TEMP_DIR/$ASSET_NAME" -C "$TEMP_DIR"
+mv "$TEMP_DIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+chmod +x "$INSTALL_DIR/$BINARY_NAME"
+
 echo ""
-echo "To start using it now, run:"
-echo "  source $SHELL_CONFIG"
+echo "✅ Installed $BINARY_NAME to $INSTALL_DIR/$BINARY_NAME"
 echo ""
-echo "Or just open a new terminal."
+
+# Check if install dir is in PATH
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo "⚠️  $INSTALL_DIR is not in your PATH"
+    echo ""
+    echo "Add it to your shell config:"
+    echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+    echo ""
+    echo "Then restart your terminal or run:"
+    echo "  source ~/.zshrc"
+    echo ""
+else
+    echo "Run 'ca --help' to get started!"
+fi
+
 echo ""
 echo "Usage:"
-echo "  $COMMAND_NAME --help                    # Show help"
-echo "  $COMMAND_NAME git@github.com:org/repo   # Deploy a repo"
-echo "  $COMMAND_NAME --skip-vm <repo>          # Add repo to existing VM"
+echo "  ca --help                         # Show help"
+echo "  ca git@github.com:org/repo.git    # Deploy a repo"
+echo "  ca list                           # List VMs"
+echo "  ca ssh                            # SSH to VM"
 echo ""
 echo "🐕 Woof!"
 
