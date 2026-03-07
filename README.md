@@ -1,5 +1,10 @@
 # Cloud Agent 🐕☁️
 
+[![CI](https://github.com/jeremyplichta/cloud-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jeremyplichta/cloud-agent/actions/workflows/ci.yml)
+[![Release](https://github.com/jeremyplichta/cloud-agent/actions/workflows/release-please.yml/badge.svg)](https://github.com/jeremyplichta/cloud-agent/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+
 **Remote GCP VM for running AI coding agents on long-running tasks**
 
 ## What is Cloud Agent?
@@ -23,53 +28,65 @@ Want to add support for another agent? See [Adding New Agent Hooks](#adding-new-
 
 ## Installation
 
-### Install the Agent Skill (Recommended)
+### Quick Install (Recommended)
+
+Download and install the pre-built binary:
+
+```bash
+# Download and run the installer
+curl -fsSL https://raw.githubusercontent.com/jeremyplichta/cloud-agent/main/install.sh | bash
+```
+
+This downloads the latest release binary for your platform (Linux/macOS, x86_64/ARM64) and installs it to `~/.local/bin/ca`.
+
+### Alternative Installation Methods
+
+**Option A: Build from source (requires Rust)**
+
+```bash
+# Clone and build
+git clone git@github.com:jeremyplichta/cloud-agent.git
+cd cloud-agent
+cargo build --release
+
+# Install to PATH
+cp target/release/ca ~/.local/bin/
+```
+
+**Option B: Download binary manually**
+
+Download the appropriate binary from [GitHub Releases](https://github.com/jeremyplichta/cloud-agent/releases):
+- `ca-linux-x86_64.tar.gz` - Linux (Intel/AMD)
+- `ca-linux-x86_64-musl.tar.gz` - Linux (static binary)
+- `ca-macos-x86_64.tar.gz` - macOS (Intel)
+- `ca-macos-aarch64.tar.gz` - macOS (Apple Silicon)
+
+```bash
+# Example for macOS Apple Silicon
+curl -LO https://github.com/jeremyplichta/cloud-agent/releases/latest/download/ca-macos-aarch64.tar.gz
+tar -xzf ca-macos-aarch64.tar.gz
+mv ca ~/.local/bin/
+```
+
+### Install the Agent Skill (Optional)
 
 Install the Cloud Agent skill so AI agents know how to deploy to cloud VMs:
 
 ```bash
 # Install to all agents (Claude Code, Cursor, Copilot, Augment, etc.)
-# Use SSH URL to avoid password prompts:
 npx ai-agent-skills install git@github.com:jeremyplichta/cloud-agent.git
 
 # Or install to a specific agent only
 npx ai-agent-skills install git@github.com:jeremyplichta/cloud-agent.git --agent claude
 ```
 
-> **Note:** Using the SSH URL (`git@github.com:...`) avoids username/password prompts if you have SSH keys configured with GitHub.
-
 This uses the [universal skills installer](https://github.com/skillcreatorai/Ai-Agent-Skills) that works with Claude Code, Cursor, VS Code Copilot, Augment/Auggie, Gemini CLI, and more.
 
-### Install the `ca` Command
-
-Install the `ca` command to run Cloud Agent from anywhere:
-
-```bash
-# Clone the repo
-git clone git@github.com:jeremyplichta/cloud-agent.git
-cd cloud-agent
-
-# Install the ca command
-./install.sh
-```
-
-This adds the `ca` function to your `.zshrc` (or `.bashrc`). Then restart your terminal or run:
-
-```bash
-source ~/.zshrc
-```
-
-Now you can use `ca` from any directory:
+### Verify Installation
 
 ```bash
 ca --help
-ca git@github.com:org/repo.git
-```
-
-To uninstall:
-
-```bash
-./uninstall.sh
+ca --version
 ```
 
 ## Prerequisites

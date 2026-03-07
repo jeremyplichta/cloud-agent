@@ -1,0 +1,24 @@
+# cargo-audit configuration
+# See: https://github.com/rustsec/rustsec/tree/main/cargo-audit
+
+[advisories]
+# Advisories to ignore (with justification)
+ignore = [
+    # RUSTSEC-2023-0071: rsa crate - Marvin Attack (timing side-channel)
+    # Severity: Medium (5.9)
+    # Status: No fix available as of 2026-03
+    # Justification: This is a transitive dependency through russh SSH library.
+    # The vulnerability relates to RSA decryption timing side-channels which
+    # requires an attacker to measure decryption times. Our use case (SSH client)
+    # has limited exposure to this attack vector.
+    # Tracking: https://rustsec.org/advisories/RUSTSEC-2023-0071
+    "RUSTSEC-2023-0071",
+]
+
+# Severity threshold for reporting
+# Options: none, low, medium, high, critical
+severity_threshold = "medium"
+
+# Show informational warnings
+informational_warnings = ["unmaintained", "yanked"]
+

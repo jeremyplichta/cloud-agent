@@ -1,0 +1,127 @@
+site_name: Cloud Agent Documentation
+site_description: Deploy GCP VMs for AI coding agents - run long tasks while you're away
+site_author: Jeremy Plichta
+site_url: https://jeremyplichta.github.io/cloud-agent/
+
+repo_name: jeremyplichta/cloud-agent
+repo_url: https://github.com/jeremyplichta/cloud-agent
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2024 Jeremy Plichta. MIT License.
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/cloud
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:pymdownx.emoji.twemoji
+      emoji_generator: !!python/name:pymdownx.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: jeremyplichta
+      repo: cloud-agent
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/jeremyplichta/cloud-agent
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+      - Prerequisites: getting-started/prerequisites.md
+  - Commands:
+      - Overview: commands/index.md
+      - Deploy: commands/deploy.md
+      - VM Management: commands/vm-management.md
+      - SSH & Files: commands/ssh-files.md
+  - Agents:
+      - Overview: agents/index.md
+      - Auggie: agents/auggie.md
+      - Claude Code: agents/claude.md
+      - Adding New Agents: agents/adding-agents.md
+  - Configuration:
+      - Environment Variables: configuration/environment.md
+      - GCP Setup: configuration/gcp-setup.md
+  - Contributing:
+      - Development Setup: contributing/development.md
+      - Architecture: contributing/architecture.md
+
