@@ -4,9 +4,9 @@
 
 use anyhow::Result;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
-use std::io::Write;
 
 use crate::config::Config;
 use crate::error::CloudAgentError;
@@ -22,8 +22,7 @@ pub struct VmManager {
 impl VmManager {
     /// Create a new VM manager
     pub fn new(config: Config) -> Self {
-        let script_dir = std::env::current_dir()
-            .expect("Failed to get current directory");
+        let script_dir = std::env::current_dir().expect("Failed to get current directory");
 
         Self { config, script_dir }
     }
@@ -31,7 +30,7 @@ impl VmManager {
     /// List all cloud-agent VMs
     pub async fn list(&self) -> Result<()> {
         utils::log("Listing cloud-agent VMs...");
-        
+
         let status = Command::new("gcloud")
             .args([
                 "compute", "instances", "list",
@@ -50,10 +49,12 @@ impl VmManager {
     /// Start a stopped VM
     pub async fn start(&self) -> Result<()> {
         utils::log(&format!("Starting VM: {}...", self.config.vm_name));
-        
+
         let status = Command::new("gcloud")
             .args([
-                "compute", "instances", "start",
+                "compute",
+                "instances",
+                "start",
                 &self.config.vm_name,
                 &format!("--zone={}", self.config.zone),
             ])
@@ -70,10 +71,12 @@ impl VmManager {
     /// Stop a running VM
     pub async fn stop(&self) -> Result<()> {
         utils::log(&format!("Stopping VM: {}...", self.config.vm_name));
-        
+
         let status = Command::new("gcloud")
             .args([
-                "compute", "instances", "stop",
+                "compute",
+                "instances",
+                "stop",
                 &self.config.vm_name,
                 &format!("--zone={}", self.config.zone),
             ])
@@ -90,13 +93,13 @@ impl VmManager {
     /// Terminate (delete) a VM
     pub async fn terminate(&self) -> Result<()> {
         utils::log_warning("Terminating VM and cleaning up resources...");
-        
+
         print!("Are you sure? [y/N] ");
         std::io::stdout().flush()?;
-        
+
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
-        
+
         if !input.trim().eq_ignore_ascii_case("y") {
             utils::log("Cancelled");
             return Ok(());
@@ -119,7 +122,9 @@ impl VmManager {
             utils::log("No terraform state found, using gcloud to delete VM...");
             let status = Command::new("gcloud")
                 .args([
-                    "compute", "instances", "delete",
+                    "compute",
+                    "instances",
+                    "delete",
                     &self.config.vm_name,
                     &format!("--zone={}", self.config.zone),
                     "--quiet",
@@ -182,7 +187,9 @@ impl VmManager {
         // Fallback to gcloud
         let output = Command::new("gcloud")
             .args([
-                "compute", "instances", "describe",
+                "compute",
+                "instances",
+                "describe",
                 &self.config.vm_name,
                 &format!("--zone={}", self.config.zone),
                 "--format=value(networkInterfaces[0].accessConfigs[0].natIP)",
@@ -222,7 +229,9 @@ impl VmManager {
         // Fallback to gcloud
         let output = Command::new("gcloud")
             .args([
-                "compute", "instances", "list",
+                "compute",
+                "instances",
+                "list",
                 &format!("--filter=name={}", self.config.vm_name),
                 "--format=value(name)",
             ])
@@ -265,7 +274,10 @@ impl VmManager {
     /// Create VM
     pub async fn create_vm(&self, force: bool) -> Result<()> {
         if !force && self.vm_exists().await? {
-            utils::log(&format!("✓ Cloud Agent VM already exists: {}", self.config.vm_name));
+            utils::log(&format!(
+                "✓ Cloud Agent VM already exists: {}",
+                self.config.vm_name
+            ));
             return Ok(());
         }
 
@@ -288,7 +300,10 @@ impl VmManager {
 
         // Apply terraform
         utils::log("");
-        utils::log(&format!("Applying Terraform (creating {} VM)...", self.config.vm_name));
+        utils::log(&format!(
+            "Applying Terraform (creating {} VM)...",
+            self.config.vm_name
+        ));
         let status = Command::new("terraform")
             .args(["apply", "-auto-approve"])
             .current_dir(&self.script_dir)
@@ -385,7 +400,10 @@ ssh_public_key = "{}"
             utils::log(&format!("✓ Additional whitelisted IP: {}", ip_with_cidr));
         }
 
-        utils::log(&format!("✓ Firewall will allow SSH from: {}", ips.join(", ")));
+        utils::log(&format!(
+            "✓ Firewall will allow SSH from: {}",
+            ips.join(", ")
+        ));
         Ok(ips)
     }
 
@@ -395,9 +413,18 @@ ssh_public_key = "{}"
             let pub_key_path = ssh_key.with_extension("pub");
             if pub_key_path.exists() {
                 let public_key = fs::read_to_string(&pub_key_path)?;
-                utils::log(&format!("✓ SSH will be secured for user: {}", self.config.ssh_username));
-                utils::log(&format!("✓ Using public key from: {}", pub_key_path.display()));
-                return Ok((self.config.ssh_username.clone(), public_key.trim().to_string()));
+                utils::log(&format!(
+                    "✓ SSH will be secured for user: {}",
+                    self.config.ssh_username
+                ));
+                utils::log(&format!(
+                    "✓ Using public key from: {}",
+                    pub_key_path.display()
+                ));
+                return Ok((
+                    self.config.ssh_username.clone(),
+                    public_key.trim().to_string(),
+                ));
             }
         }
 
@@ -438,7 +465,10 @@ ssh_public_key = "{}"
         if !self.vm_exists().await? {
             self.create_vm(false).await?;
         } else {
-            utils::log(&format!("✓ Cloud Agent VM already exists: {}", self.config.vm_name));
+            utils::log(&format!(
+                "✓ Cloud Agent VM already exists: {}",
+                self.config.vm_name
+            ));
         }
 
         // Deploy repos
@@ -472,7 +502,7 @@ ssh_public_key = "{}"
                  chmod 644 ~/.ssh/id_ed25519.pub 2>/dev/null || true && \
                  ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && \
                  git config --global user.email 'cloud-agent@localhost' && \
-                 git config --global user.name 'Cloud Agent'"
+                 git config --global user.name 'Cloud Agent'",
             )?;
 
             utils::log_success("GitHub SSH key transferred");
@@ -517,7 +547,7 @@ ssh_public_key = "{}"
                 ssh_client.execute(
                     "mkdir -p ~/.augment && \
                      mv ~/augment-session-temp.json ~/.augment/session.json && \
-                     chmod 600 ~/.augment/session.json"
+                     chmod 600 ~/.augment/session.json",
                 )?;
                 utils::log("  ✅ Augment credentials transferred");
             }
@@ -545,7 +575,7 @@ ssh_public_key = "{}"
                 ssh_client.execute(
                     "mkdir -p ~/.codex && \
                      mv ~/codex-config-temp.toml ~/.codex/config.toml && \
-                     chmod 600 ~/.codex/config.toml"
+                     chmod 600 ~/.codex/config.toml",
                 )?;
                 utils::log("  ✅ Codex credentials transferred");
             }
@@ -560,7 +590,9 @@ ssh_public_key = "{}"
         utils::log("Cloning repositories to VM...");
 
         // Ensure /workspace is writable
-        ssh_client.execute("sudo chmod 777 /workspace 2>/dev/null || true").ok();
+        ssh_client
+            .execute("sudo chmod 777 /workspace 2>/dev/null || true")
+            .ok();
 
         for repo in repos {
             let repo_name = utils::extract_repo_name(repo)?;
@@ -602,7 +634,10 @@ ssh_public_key = "{}"
         utils::log("  ca ssh");
         utils::log("");
         utils::log("Or manually SSH:");
-        utils::log(&format!("  ssh -i ~/.ssh/cloud-auggie {}@{}", self.config.ssh_username, vm_ip));
+        utils::log(&format!(
+            "  ssh -i ~/.ssh/cloud-auggie {}@{}",
+            self.config.ssh_username, vm_ip
+        ));
         utils::log("");
         utils::log("Start working:");
         utils::log("  cd /workspace/<repo-name>");
@@ -624,4 +659,3 @@ ssh_public_key = "{}"
         Ok(())
     }
 }
-

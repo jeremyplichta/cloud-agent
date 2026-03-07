@@ -3,12 +3,12 @@
 //! This module handles parsing command-line arguments and executing commands.
 //! We use the `clap` crate which makes it easy to build CLI tools.
 
-use clap::{Parser, Subcommand};
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 
+use crate::agents::AgentManager;
 use crate::config::Config;
 use crate::gcp::VmManager;
-use crate::agents::AgentManager;
 
 /// Cloud Agent - Deploy repos to Cloud Agent VMs for AI coding agents
 #[derive(Parser, Debug)]
@@ -157,4 +157,3 @@ pub async fn execute(args: Args) -> Result<()> {
 
     Ok(())
 }
-

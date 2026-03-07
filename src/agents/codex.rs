@@ -1,8 +1,8 @@
 //! Codex (OpenAI) agent implementation
 
-use std::path::PathBuf;
 use crate::agents::Agent;
 use crate::utils;
+use std::path::PathBuf;
 
 pub struct Codex;
 
@@ -44,4 +44,3 @@ impl Agent for Codex {
         "~/.codex/config.toml"
     }
 }
-

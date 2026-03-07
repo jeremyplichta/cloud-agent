@@ -15,6 +15,7 @@ use crate::error::CloudAgentError;
 use crate::utils;
 
 /// Trait for agent implementations
+#[allow(dead_code)]
 pub trait Agent {
     /// Get the display name of the agent
     fn display_name(&self) -> &str;
@@ -55,7 +56,9 @@ impl AgentManager {
             "codex" => Box::new(codex::Codex),
             _ => {
                 let available = "auggie, claude, codex";
-                return Err(CloudAgentError::AgentNotFound(config.agent, available.to_string()).into());
+                return Err(
+                    CloudAgentError::AgentNotFound(config.agent, available.to_string()).into(),
+                );
             }
         };
 
@@ -64,49 +67,61 @@ impl AgentManager {
 
     /// Check agent prerequisites (installed and logged in)
     pub async fn check_prerequisites(&self) -> Result<()> {
-        utils::log(&format!("Checking {} prerequisites...", self.agent.display_name()));
+        utils::log(&format!(
+            "Checking {} prerequisites...",
+            self.agent.display_name()
+        ));
 
         if !self.agent.check_local() {
             return Err(CloudAgentError::AgentNotLoggedIn(
                 self.agent.display_name().to_string(),
                 format!("Install it with: {}", self.agent.install_command()),
-            ).into());
+            )
+            .into());
         }
 
         if !self.agent.check_logged_in() {
             return Err(CloudAgentError::AgentNotLoggedIn(
                 self.agent.display_name().to_string(),
                 self.agent.login_instructions(),
-            ).into());
+            )
+            .into());
         }
 
-        utils::log_success(&format!("{} CLI found and logged in", self.agent.display_name()));
+        utils::log_success(&format!(
+            "{} CLI found and logged in",
+            self.agent.display_name()
+        ));
         Ok(())
     }
 
     /// Get the agent's display name
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &str {
         self.agent.display_name()
     }
 
     /// Get the command to run the agent
+    #[allow(dead_code)]
     pub fn command(&self) -> &str {
         self.agent.command()
     }
 
     /// Get the agent's credentials path
+    #[allow(dead_code)]
     pub fn credentials_path(&self) -> Option<PathBuf> {
         self.agent.credentials_path()
     }
 
     /// Get the remote credentials path
+    #[allow(dead_code)]
     pub fn remote_credentials_path(&self) -> &str {
         self.agent.remote_credentials_path()
     }
 }
 
 /// List all available agents
+#[allow(dead_code)]
 pub fn list_agents() -> Vec<&'static str> {
     vec!["auggie", "claude", "codex"]
 }
-

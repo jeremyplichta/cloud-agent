@@ -7,6 +7,7 @@ use thiserror::Error;
 
 /// Main error type for cloud-agent operations
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum CloudAgentError {
     #[error("VM '{0}' not found")]
     VmNotFound(String),
@@ -52,5 +53,5 @@ pub enum CloudAgentError {
 }
 
 /// Result type alias for cloud-agent operations
+#[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, CloudAgentError>;
-

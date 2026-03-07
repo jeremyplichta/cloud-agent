@@ -1,8 +1,8 @@
 //! Auggie (Augment Code) agent implementation
 
-use std::path::PathBuf;
 use crate::agents::Agent;
 use crate::utils;
+use std::path::PathBuf;
 
 pub struct Auggie;
 
@@ -44,4 +44,3 @@ impl Agent for Auggie {
         "~/.augment/session.json"
     }
 }
-

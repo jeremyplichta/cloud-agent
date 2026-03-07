@@ -58,9 +58,7 @@ pub async fn detect_public_ipv4() -> Result<String> {
 
 /// Check if a string is a valid IPv4 address
 fn is_valid_ipv4(ip: &str) -> bool {
-    ip.split('.')
-        .filter_map(|s| s.parse::<u8>().ok())
-        .count() == 4
+    ip.split('.').filter_map(|s| s.parse::<u8>().ok()).count() == 4
 }
 
 /// Check if a command exists in PATH
@@ -69,10 +67,9 @@ pub fn command_exists(cmd: &str) -> bool {
 }
 
 /// Run a command and return its output
+#[allow(dead_code)]
 pub fn run_command(cmd: &str, args: &[&str]) -> Result<String> {
-    let output = Command::new(cmd)
-        .args(args)
-        .output()?;
+    let output = Command::new(cmd).args(args).output()?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -83,10 +80,9 @@ pub fn run_command(cmd: &str, args: &[&str]) -> Result<String> {
 }
 
 /// Run a command and stream its output
+#[allow(dead_code)]
 pub fn run_command_streaming(cmd: &str, args: &[&str]) -> Result<()> {
-    let status = Command::new(cmd)
-        .args(args)
-        .status()?;
+    let status = Command::new(cmd).args(args).status()?;
 
     if !status.success() {
         return Err(anyhow::anyhow!("Command failed with status: {}", status));
@@ -100,7 +96,7 @@ pub fn extract_repo_name(url: &str) -> Result<String> {
     // Handle both SSH and HTTPS URLs
     // git@github.com:org/repo.git -> repo
     // https://github.com/org/repo.git -> repo
-    
+
     let name = url
         .rsplit('/')
         .next()
@@ -149,4 +145,3 @@ mod tests {
         );
     }
 }
-

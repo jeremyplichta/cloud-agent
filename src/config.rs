@@ -83,7 +83,11 @@ impl Config {
             .unwrap_or_default();
 
         // Detect SSH key
-        let ssh_key = args.ssh_key.as_ref().map(PathBuf::from).or_else(detect_ssh_key);
+        let ssh_key = args
+            .ssh_key
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(detect_ssh_key);
 
         Ok(Config {
             agent: args.agent.clone(),
@@ -96,7 +100,11 @@ impl Config {
             ssh_username,
             skip_deletion: args.skip_deletion.clone(),
             cluster_name: args.cluster_name.clone(),
-            cluster_zone: args.cluster_name.as_ref().map(|_| args.zone.clone()).unwrap_or_else(|| args.zone.clone()),
+            cluster_zone: args
+                .cluster_name
+                .as_ref()
+                .map(|_| args.zone.clone())
+                .unwrap_or_else(|| args.zone.clone()),
             ssh_key,
             github_token: args.github_token.clone(),
             permissions,
@@ -116,9 +124,7 @@ fn get_gcp_project() -> Result<String> {
         return Err(CloudAgentError::GcpProjectNotConfigured.into());
     }
 
-    let project_id = String::from_utf8(output.stdout)?
-        .trim()
-        .to_string();
+    let project_id = String::from_utf8(output.stdout)?.trim().to_string();
 
     if project_id.is_empty() {
         return Err(CloudAgentError::GcpProjectNotConfigured.into());
@@ -133,14 +139,15 @@ fn derive_owner(username: Option<&str>, company: Option<&str>) -> Result<String>
         user.to_string()
     } else {
         // Get from $USER environment variable
-        std::env::var("USER")
-            .map_err(|_| CloudAgentError::ConfigError("USER environment variable not set".to_string()))?
+        std::env::var("USER").map_err(|_| {
+            CloudAgentError::ConfigError("USER environment variable not set".to_string())
+        })?
     };
 
-    let mut owner = base.replace('.', "_").replace('-', "_").to_lowercase();
+    let mut owner = base.replace(['.', '-'], "_").to_lowercase();
 
     if let Some(comp) = company {
-        let company_suffix = comp.replace('.', "_").replace('-', "_").to_lowercase();
+        let company_suffix = comp.replace(['.', '-'], "_").to_lowercase();
         owner = format!("{}_{}", owner, company_suffix);
     }
 
@@ -155,12 +162,7 @@ fn derive_vm_name(owner: &str) -> String {
 /// Detect SSH key from common locations
 fn detect_ssh_key() -> Option<PathBuf> {
     let home = dirs::home_dir()?;
-    let candidates = [
-        "cloud-auggie",
-        "cloud-agent",
-        "id_ed25519",
-        "id_rsa",
-    ];
+    let candidates = ["cloud-auggie", "cloud-agent", "id_ed25519", "id_rsa"];
 
     for candidate in &candidates {
         let path = home.join(".ssh").join(candidate);
@@ -171,4 +173,3 @@ fn detect_ssh_key() -> Option<PathBuf> {
 
     None
 }
-

@@ -19,8 +19,10 @@ pub fn detect_current_repo() -> Result<Vec<String>> {
 
     if !is_git_repo {
         return Err(CloudAgentError::ConfigError(
-            "Not in a git repository. Please specify a repository URL or run from a git directory.".to_string()
-        ).into());
+            "Not in a git repository. Please specify a repository URL or run from a git directory."
+                .to_string(),
+        )
+        .into());
     }
 
     // Get the origin URL
@@ -30,25 +32,26 @@ pub fn detect_current_repo() -> Result<Vec<String>> {
 
     if !output.status.success() {
         return Err(CloudAgentError::ConfigError(
-            "No 'origin' remote found in current git repository.".to_string()
-        ).into());
+            "No 'origin' remote found in current git repository.".to_string(),
+        )
+        .into());
     }
 
-    let url = String::from_utf8(output.stdout)?
-        .trim()
-        .to_string();
+    let url = String::from_utf8(output.stdout)?.trim().to_string();
 
     if url.is_empty() {
-        return Err(CloudAgentError::ConfigError(
-            "Origin remote URL is empty.".to_string()
-        ).into());
+        return Err(CloudAgentError::ConfigError("Origin remote URL is empty.".to_string()).into());
     }
 
-    crate::utils::log(&format!("Auto-detected repo from current directory: {}", url));
+    crate::utils::log(&format!(
+        "Auto-detected repo from current directory: {}",
+        url
+    ));
     Ok(vec![url])
 }
 
 /// Validate a repository URL
+#[cfg(test)]
 pub fn validate_repo_url(url: &str) -> Result<()> {
     // Check if it's a valid SSH or HTTPS URL
     if url.starts_with("git@") || url.starts_with("https://") || url.starts_with("http://") {
@@ -69,4 +72,3 @@ mod tests {
         assert!(validate_repo_url("invalid-url").is_err());
     }
 }
-

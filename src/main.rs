@@ -3,13 +3,13 @@
 //! This tool helps you create and manage Google Cloud VMs configured for
 //! running AI coding agents like Auggie, Claude Code, and Codex.
 
+mod agents;
 mod cli;
 mod config;
 mod error;
 mod gcp;
-mod ssh;
 mod git;
-mod agents;
+mod ssh;
 mod utils;
 
 use anyhow::Result;
@@ -34,4 +34,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
