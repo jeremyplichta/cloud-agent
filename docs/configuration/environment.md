@@ -56,7 +56,7 @@ GCP_REGION=us-west1 ca git@github.com:org/repo.git
 Company domain for username derivation.
 
 ```bash
-COMPANY=redis.com ca git@github.com:org/repo.git
+COMPANY=example.com ca git@github.com:org/repo.git
 ```
 
 This affects the VM name: `cloud-agent-jsmith-redis_com`

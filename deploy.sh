@@ -130,7 +130,7 @@ Environment Variables:
   SKIP_DELETION     Set skip_deletion label (default: yes)
   PERMISSIONS       Comma-separated permissions for VM service account
   ADDITIONAL_IP     Additional IP to whitelist for SSH access (same as --ip)
-  COMPANY           Company domain to append to username (e.g., redis.com)
+  COMPANY           Company domain to append to username (e.g., example.com)
                     Results in owner like: firstname_lastname_redis_com
   USERNAME          Override derived username/owner (same as --username)
 
@@ -197,7 +197,7 @@ get_owner() {
 
     # Append company if COMPANY env var is set
     if [ -n "${COMPANY:-}" ]; then
-        # Convert company domain to underscore format (redis.com -> redis_com)
+        # Convert company domain to underscore format (example.com -> redis_com)
         local company_suffix=$(echo "$COMPANY" | tr '[:upper:]' '[:lower:]' | tr '.-' '_')
         owner="${owner}_${company_suffix}"
     fi

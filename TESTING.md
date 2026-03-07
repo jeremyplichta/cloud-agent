@@ -153,7 +153,7 @@ Before manual testing, ensure you have:
 - [ ] `--permissions compute,gke` grants permissions
 - [ ] `--ip 1.2.3.4` whitelists IP
 - [ ] `--machine-type n2-standard-8` uses custom type
-- [ ] `COMPANY=redis.com` affects username
+- [ ] `COMPANY=example.com` affects username
 
 ## Automated Testing
 

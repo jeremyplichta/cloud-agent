@@ -2,7 +2,7 @@
 name = "cloud-agent"
 version = "0.1.0"
 edition = "2021"
-authors = ["Jeremy Plichta <jeremy.plichta@redis.com>"]
+authors = ["Jeremy Plichta <jplichta@gmail.com>"]
 description = "Deploy repos to Cloud Agent VMs for AI coding agents"
 license = "MIT"
 repository = "https://github.com/jeremyplichta/cloud-agent"
