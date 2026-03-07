@@ -41,23 +41,10 @@ jobs:
       - name: Run security audit
         run: cargo audit --ignore RUSTSEC-2023-0071
 
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    # Dependency review is informational - don't block PRs if it fails
-    continue-on-error: true
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
-          # Allow known advisories with no fix available
-          # RUSTSEC-2023-0071 (rsa crate timing side-channel) - no fix available
-          allow-ghsas: GHSA-c38w-74pg-36hr
+  # Dependency Review removed - cargo-audit already covers security vulnerabilities
+  # and the dependency-review-action was flagging known issues with no available fix.
+  # The RSA crate vulnerability (RUSTSEC-2023-0071/GHSA-c38w-74pg-36hr) has no fix
+  # and is a transitive dependency through russh.
 
   supply-chain:
     name: Supply Chain Security
