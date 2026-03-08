@@ -1,6 +1,6 @@
 [package]
 name = "cloud-agent"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Jeremy Plichta <jplichta@gmail.com>"]
 description = "Deploy repos to Cloud Agent VMs for AI coding agents"
