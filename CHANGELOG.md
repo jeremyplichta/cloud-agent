@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1](https://github.com/jeremyplichta/cloud-agent/compare/v0.1.0...v0.1.1) (2026-03-08)
+
+
+### Bug Fixes
+
+* use rustls-tls instead of native-tls for musl builds ([c1e0abf](https://github.com/jeremyplichta/cloud-agent/commit/c1e0abf457f6f271878f4736188a99c09b3230d9))
+
 ## 0.1.0 (2026-03-07)
 
 
